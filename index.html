@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="업로드한 음악을 브라우저에서 분석하고 대편성 오케스트라 배치 기준으로 공간음향을 생성하는 로컬 웹 앱" />
+  <title>Spatial Orchestra Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar" aria-label="상단">
+      <a class="brand" href="#top" aria-label="Spatial Orchestra Studio">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>
+          <strong>Spatial Orchestra Studio</strong>
+          <small>local audio spatializer</small>
+        </span>
+      </a>
+      <div class="top-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="다크 모드로 전환" aria-pressed="false">
+          <span class="theme-toggle-mark" aria-hidden="true"></span>
+          <span id="theme-toggle-text">Dark</span>
+        </button>
+        <div class="status-pill" aria-live="polite">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">음악 파일 대기 중</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="workbench" id="top">
+      <section class="upload-surface" id="drop-zone" aria-labelledby="hero-title">
+        <div class="staff-lines" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <p class="eyebrow">ORCHESTRAL SPATIAL AUDIO</p>
+        <h1 id="hero-title">Music for Orchestra Stage</h1>
+        <p class="hero-copy">로컬 파일을 분석해 템포, 조성, 라우드니스, 스펙트럼, 스테레오 폭, 구간 변화까지 읽고 대편성 오케스트라 좌석 배치 기준의 공간음향으로 재구성합니다.</p>
+        <div class="upload-actions">
+          <label class="primary-action" for="audio-file">음악 선택</label>
+          <button class="secondary-action" id="reset-button" type="button" hidden>초기화</button>
+        </div>
+        <input id="audio-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.webm" />
+        <div class="format-row" aria-label="지원 형식">
+          <span>MP3</span>
+          <span>WAV</span>
+          <span>M4A</span>
+          <span>AAC</span>
+          <span>OGG</span>
+          <span>FLAC</span>
+        </div>
+      </section>
+
+      <section class="transport-panel" aria-label="재생 및 변환">
+        <div class="track-header">
+          <p id="track-kicker">READY</p>
+          <h2 id="track-name">아직 선택된 파일이 없습니다</h2>
+          <p id="track-subtitle">브라우저 안에서만 분석하고 변환합니다.</p>
+        </div>
+
+        <div class="mode-toggle" role="group" aria-label="재생 모드">
+          <button class="mode-button is-active" type="button" data-mode="spatial">공간음향</button>
+          <button class="mode-button" type="button" data-mode="atmos" title="Dolby Atmos 방식의 오브젝트/높이감 기반 바이노럴 렌더링">DOLBY ATMOS</button>
+          <button class="mode-button" type="button" data-mode="original">원본</button>
+        </div>
+        <div class="mode-description" id="mode-description">
+          <strong>공간음향</strong>
+          <span>무대 폭, 전후 깊이, 홀 잔향, 출력으로 대편성 오케스트라 무대를 재구성합니다.</span>
+        </div>
+
+        <div class="transport-row">
+          <button class="round-button" id="play-button" type="button" disabled aria-label="재생">▶</button>
+          <button class="round-button subtle" id="stop-button" type="button" disabled aria-label="정지">■</button>
+          <div class="time-block">
+            <input id="seek-slider" type="range" min="0" max="1000" value="0" disabled aria-label="재생 위치" />
+            <div>
+              <span id="current-time">0:00</span>
+              <span id="total-time">0:00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-grid" aria-label="공간화 설정">
+          <label>
+            <span>무대 폭</span>
+            <input id="width-slider" type="range" min="60" max="150" value="112" />
+            <b id="width-value">112%</b>
+          </label>
+          <label>
+            <span>전후 깊이</span>
+            <input id="depth-slider" type="range" min="60" max="160" value="118" />
+            <b id="depth-value">118%</b>
+          </label>
+          <label>
+            <span>홀 잔향</span>
+            <input id="room-slider" type="range" min="0" max="100" value="46" />
+            <b id="room-value">46%</b>
+          </label>
+          <label>
+            <span>출력</span>
+            <input id="gain-slider" type="range" min="30" max="100" value="100" />
+            <b id="gain-value">100%</b>
+          </label>
+          <label class="select-control">
+            <span>출력 채널</span>
+            <select id="channel-layout" aria-label="WAV 출력 채널">
+              <option value="stereo">2.0 Stereo</option>
+              <option value="quad">4.0 Quad</option>
+              <option value="surround51">5.1 Surround</option>
+              <option value="surround71">7.1 Surround</option>
+              <option value="atmos714">7.1.4 Atmos Bed</option>
+            </select>
+            <b id="channel-value">2ch</b>
+          </label>
+          <label class="switch-control">
+            <span>오케스트라 배치</span>
+            <input id="orchestra-toggle" type="checkbox" checked aria-label="대편성 오케스트라 위치 기준" />
+            <b id="orchestra-value">ON</b>
+          </label>
+          <label class="switch-control">
+            <span>자동 리마스터</span>
+            <input id="remaster-toggle" type="checkbox" checked />
+            <b id="remaster-value">ON</b>
+          </label>
+        </div>
+
+        <button class="export-button" id="export-button" type="button" disabled>공간 리마스터 WAV 저장</button>
+      </section>
+    </section>
+
+    <section class="metric-grid" aria-label="요약 분석">
+      <article class="metric-tile" tabindex="0" data-description="업로드한 오디오의 전체 재생 시간과 샘플레이트입니다.">
+        <span>길이</span>
+        <strong id="duration-value">--:--</strong>
+        <small id="duration-note">duration</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="온셋 패턴을 분석해 추정한 분당 박자 수입니다.">
+        <span>BPM</span>
+        <strong id="tempo-value">--</strong>
+        <small id="tempo-note">tempo</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="크로마 프로파일로 추정한 중심 조성과 장단조입니다.">
+        <span>조성</span>
+        <strong id="key-value">--</strong>
+        <small id="key-note">tonality</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="곡 전체 RMS 기준 평균 음량입니다. 리마스터 보정의 기준값입니다.">
+        <span>라우드니스</span>
+        <strong id="loudness-value">-- dBFS</strong>
+        <small id="loudness-note">RMS</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="조용한 구간과 큰 구간 사이의 레벨 차이입니다.">
+        <span>다이내믹</span>
+        <strong id="dynamic-value">-- dB</strong>
+        <small id="dynamic-note">range</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="가장 큰 순간 피크입니다. 리미터가 이 값을 보호합니다.">
+        <span>피크</span>
+        <strong id="peak-value">-- dBFS</strong>
+        <small id="peak-note">peak</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="스펙트럼 에너지의 중심으로 밝기와 무게감을 가늠합니다.">
+        <span>중심 주파수</span>
+        <strong id="centroid-value">-- Hz</strong>
+        <small id="centroid-note">centroid</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="전체 에너지 중 85%가 포함되는 주파수 지점입니다.">
+        <span>롤오프</span>
+        <strong id="rolloff-value">-- Hz</strong>
+        <small id="rolloff-note">85%</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="Mid/Side 비율로 추정한 원본 스테레오 이미지의 폭입니다.">
+        <span>스테레오 폭</span>
+        <strong id="stereo-value">--</strong>
+        <small id="stereo-note">width</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="스펙트럼 평탄도입니다. 높을수록 노이즈성 질감에 가깝습니다.">
+        <span>텍스처</span>
+        <strong id="flatness-value">--</strong>
+        <small id="flatness-note">flatness</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="스펙트럼에서 가장 두드러진 기본 피치 추정값입니다.">
+        <span>주요 피치</span>
+        <strong id="pitch-value">--</strong>
+        <small id="pitch-note">dominant</small>
+      </article>
+      <article class="metric-tile" tabindex="0" data-description="0 dBFS 근처에 닿은 샘플 비율로 과부하 위험을 봅니다.">
+        <span>클리핑</span>
+        <strong id="clip-value">--%</strong>
+        <small id="clip-note">samples</small>
+      </article>
+    </section>
+
+    <section class="remaster-compare-panel" aria-label="자동 리마스터 적용 전후 비교">
+      <div class="panel-heading">
+        <div>
+          <p class="panel-kicker">AUTO REMASTER A/B</p>
+          <h2>자동 리마스터 적용 전/후</h2>
+        </div>
+        <span id="remaster-compare-tag">대기</span>
+      </div>
+      <div class="remaster-compare-table" role="table" aria-label="자동 리마스터 적용 전후 표">
+        <div class="compare-row compare-head" role="row">
+          <span role="columnheader">분석 항목</span>
+          <span role="columnheader">적용 전</span>
+          <span role="columnheader">적용 후</span>
+          <span role="columnheader">설명</span>
+        </div>
+        <div id="remaster-compare-body"></div>
+      </div>
+    </section>
+
+    <section class="stage-panel" aria-label="오케스트라 공간 배치">
+      <div class="panel-heading">
+        <div>
+          <p class="panel-kicker">LARGE ORCHESTRA STAGE</p>
+          <h2>대편성 오케스트라 위치 기준</h2>
+        </div>
+        <div class="stage-heading-actions">
+          <button class="stage-reset-button" id="stage-reset-button" type="button">위치 초기화</button>
+          <span id="stage-tag">대기</span>
+        </div>
+      </div>
+      <div class="stage-layout">
+        <div class="stage-map" id="stage-map" aria-label="공간 배치 지도"></div>
+        <div class="stage-list" id="stage-list"></div>
+      </div>
+    </section>
+
+    <section class="visual-grid" aria-label="시각 분석">
+      <article class="panel panel-wide">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">TIME DOMAIN</p>
+            <h2>Waveform</h2>
+          </div>
+          <span id="waveform-tag">대기</span>
+        </div>
+        <canvas id="waveform-canvas" aria-label="파형"></canvas>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">FREQUENCY</p>
+            <h2>Spectrum</h2>
+          </div>
+          <span id="spectrum-tag">대기</span>
+        </div>
+        <canvas id="spectrum-canvas" aria-label="스펙트럼"></canvas>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">TIME x FREQUENCY</p>
+            <h2>Spectrogram</h2>
+          </div>
+          <span id="spectrogram-tag">대기</span>
+        </div>
+        <canvas id="spectrogram-canvas" aria-label="스펙트로그램"></canvas>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">LEVEL</p>
+            <h2>Loudness Curve</h2>
+          </div>
+          <span id="loudness-tag">대기</span>
+        </div>
+        <canvas id="loudness-canvas" aria-label="라우드니스 곡선"></canvas>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">BANDS</p>
+            <h2>Frequency Balance</h2>
+          </div>
+          <span id="bands-tag">대기</span>
+        </div>
+        <div class="band-list" id="band-list"></div>
+      </article>
+    </section>
+
+    <section class="insight-grid" aria-label="상세 리포트">
+      <article class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">FILE</p>
+            <h2>Metadata</h2>
+          </div>
+        </div>
+        <dl class="metadata-list" id="metadata-list">
+          <div>
+            <dt>상태</dt>
+            <dd>업로드 대기</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">MUSICAL PROFILE</p>
+            <h2>Analysis Report</h2>
+          </div>
+          <span id="report-tag">대기</span>
+        </div>
+        <p class="report-copy" id="report-copy">파일을 선택하면 음악적 성격과 공간화 전략이 정리됩니다.</p>
+        <div class="trait-list" id="trait-list"></div>
+        <div class="remaster-list" id="remaster-list"></div>
+      </article>
+
+      <article class="panel panel-wide">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">STRUCTURE</p>
+            <h2>Section Timeline</h2>
+          </div>
+          <span id="timeline-tag">대기</span>
+        </div>
+        <div class="timeline-list" id="timeline-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="script.js"></script>
+</body>
+</html>
