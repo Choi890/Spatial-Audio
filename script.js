@@ -575,7 +575,8 @@ function handleDrop(event) {
 }
 
 async function handleFile(file) {
-  // Upload starts the analysis, playback graph setup, and spatial render state from one file.
+  // 사용자가 음원을 올리면 파일 검증, 디코딩, 분석, 공간 재생 상태 초기화를 한 번에 수행한다.
+  // 이후 재생/정지/Export 버튼은 이 함수에서 만든 state.analysis와 source 정보를 사용한다.
   if (!isAudioFile(file)) {
     showToast('오디오 파일을 선택해 주세요.');
     return;
@@ -866,7 +867,8 @@ function estimateTempo(samples, sampleRate) {
 }
 
 function analyzeSpectrum(samples, sampleRate) {
-  // Spectrum analysis feeds both mix metrics and instrument/stage recommendations.
+  // 여러 FFT 프레임을 평균해 스펙트럼 중심, rolloff, 밝기, 대역별 에너지 비율을 계산한다.
+  // 이 값들은 화면의 믹스 지표뿐 아니라 무대 배치와 리마스터 추천에도 사용된다.
   const fftSize = 4096;
   const frameCount = Math.min(96, Math.max(14, Math.floor(samples.length / sampleRate * 1.2)));
   const magnitudes = new Float32Array(fftSize / 2);
@@ -1129,7 +1131,8 @@ function buildInstrumentSignatureWeights(fftSize, binHz) {
 }
 
 function estimateKey(samples, sampleRate) {
-  // Chroma scoring gives a lightweight key estimate used for color and report context.
+  // 주파수 성분을 12개 pitch class로 접어 chroma를 만들고 장/단조 프로파일과 비교한다.
+  // 추정된 key는 리포트 문장, 컬러 액센트, 음악적 해석 정보에 쓰인다.
   const fftSize = 4096;
   const frameCount = Math.min(76, Math.max(10, Math.floor(samples.length / sampleRate)));
   const chroma = new Float32Array(12);
@@ -4679,7 +4682,8 @@ function isLowSection(section) {
 }
 
 async function exportSpatialWav() {
-  // Export renders the current spatial settings offline so the downloaded WAV matches the UI controls.
+  // 현재 UI에서 선택한 공간 폭, 깊이, 룸, 채널 레이아웃을 기준으로 오프라인 렌더링한다.
+  // 사용자가 듣고 조정한 설정과 다운로드되는 WAV 결과가 일치하도록 하는 Export 진입점이다.
   if (!state.analysis) return;
   stopPlayback(false);
   state.settings = getSpatialSettings();
