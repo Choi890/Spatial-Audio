@@ -72,6 +72,7 @@ const refs = {
     loudness: document.getElementById('loudness-tag'),
     bands: document.getElementById('bands-tag'),
     stage: document.getElementById('stage-tag'),
+    ai: document.getElementById('ai-tag'),
     report: document.getElementById('report-tag'),
     timeline: document.getElementById('timeline-tag')
   },
@@ -83,6 +84,9 @@ const refs = {
   stageMap: document.getElementById('stage-map'),
   stageList: document.getElementById('stage-list'),
   metadataList: document.getElementById('metadata-list'),
+  aiSummaryGrid: document.getElementById('ai-summary-grid'),
+  aiChipList: document.getElementById('ai-chip-list'),
+  aiSectionGrid: document.getElementById('ai-section-grid'),
   reportCopy: document.getElementById('report-copy'),
   traitList: document.getElementById('trait-list'),
   remasterList: document.getElementById('remaster-list'),
@@ -113,6 +117,111 @@ const ORCHESTRA_SECTIONS = [
   { id: 'harpPiano', short: 'Hp', label: '하프/피아노', role: '좌후방 입자감', type: 'bandpass', freq: 2850, q: 0.58, gain: 0.17, send: 0.38, x: -3.25, z: -3.45, band: 'air', color: '#ffbe98' }
 ];
 
+const ORCHESTRA_BY_ID = Object.fromEntries(ORCHESTRA_SECTIONS.map((section) => [section.id, section]));
+const ORCHESTRA_INDEX_BY_ID = Object.fromEntries(ORCHESTRA_SECTIONS.map((section, index) => [section.id, index]));
+const INSTRUMENT_SIGNATURES = {
+  violins1: [
+    { min: 196, max: 880, weight: 0.28 },
+    { min: 880, max: 2600, weight: 0.3 },
+    { min: 2600, max: 6200, weight: 0.28 },
+    { min: 6200, max: 9800, weight: 0.14 }
+  ],
+  violins2: [
+    { min: 150, max: 760, weight: 0.32 },
+    { min: 760, max: 2200, weight: 0.34 },
+    { min: 2200, max: 5200, weight: 0.24 },
+    { min: 5200, max: 8200, weight: 0.1 }
+  ],
+  violas: [
+    { min: 130, max: 520, weight: 0.34 },
+    { min: 420, max: 1500, weight: 0.36 },
+    { min: 1500, max: 3400, weight: 0.22 },
+    { min: 3400, max: 5600, weight: 0.08 }
+  ],
+  cellos: [
+    { min: 65, max: 260, weight: 0.42 },
+    { min: 180, max: 720, weight: 0.36 },
+    { min: 720, max: 2200, weight: 0.18 },
+    { min: 2200, max: 4200, weight: 0.04 }
+  ],
+  basses: [
+    { min: 38, max: 160, weight: 0.58 },
+    { min: 160, max: 460, weight: 0.3 },
+    { min: 460, max: 1000, weight: 0.12 }
+  ],
+  woodwindsHigh: [
+    { min: 620, max: 1200, weight: 0.16 },
+    { min: 1200, max: 2600, weight: 0.3 },
+    { min: 2600, max: 5200, weight: 0.32 },
+    { min: 5200, max: 9000, weight: 0.16 },
+    { min: 9000, max: 13000, weight: 0.06 }
+  ],
+  woodwindsLow: [
+    { min: 120, max: 360, weight: 0.14 },
+    { min: 360, max: 900, weight: 0.34 },
+    { min: 900, max: 1800, weight: 0.3 },
+    { min: 1800, max: 3600, weight: 0.16 },
+    { min: 3600, max: 6200, weight: 0.06 }
+  ],
+  horns: [
+    { min: 80, max: 260, weight: 0.16 },
+    { min: 260, max: 700, weight: 0.34 },
+    { min: 700, max: 1500, weight: 0.32 },
+    { min: 1500, max: 3200, weight: 0.14 },
+    { min: 3200, max: 5200, weight: 0.04 }
+  ],
+  brass: [
+    { min: 160, max: 520, weight: 0.12 },
+    { min: 520, max: 1600, weight: 0.28 },
+    { min: 1600, max: 3600, weight: 0.34 },
+    { min: 3600, max: 6800, weight: 0.2 },
+    { min: 6800, max: 10000, weight: 0.06 }
+  ],
+  timpani: [
+    { min: 45, max: 180, weight: 0.68 },
+    { min: 180, max: 360, weight: 0.22 },
+    { min: 360, max: 720, weight: 0.1 }
+  ],
+  percussion: [
+    { min: 1200, max: 3200, weight: 0.16 },
+    { min: 3200, max: 7600, weight: 0.46 },
+    { min: 7600, max: 14000, weight: 0.38 }
+  ],
+  harpPiano: [
+    { min: 45, max: 120, weight: 0.1 },
+    { min: 120, max: 520, weight: 0.22 },
+    { min: 520, max: 1800, weight: 0.26 },
+    { min: 1800, max: 5200, weight: 0.28 },
+    { min: 5200, max: 9500, weight: 0.14 }
+  ]
+};
+const DEEP_AUDIO_MODEL = {
+  source: 'Essentia MusiCNN MTT',
+  modelUrl: 'models/mtt-musicnn-1/model.json',
+  targetSampleRate: 16000,
+  maxSeconds: 54,
+  hopSize: 256,
+  timeoutMs: 26000,
+  minTagScore: 0.08,
+  classes: [
+    'ambient', 'beat', 'beats', 'cello', 'choir', 'choral', 'classic', 'classical', 'country', 'dance',
+    'drums', 'electronic', 'fast', 'female', 'female vocal', 'female voice', 'flute', 'guitar', 'harp',
+    'harpsichord', 'indian', 'loud', 'male', 'male vocal', 'male voice', 'man', 'metal', 'new age',
+    'no vocal', 'no vocals', 'no voice', 'opera', 'piano', 'pop', 'quiet', 'rock', 'singing', 'sitar',
+    'slow', 'soft', 'solo', 'strings', 'synth', 'techno', 'violin', 'vocal', 'vocals', 'voice', 'weird',
+    'woman'
+  ],
+  sectionWeights: {
+    cello: { cellos: 1 },
+    flute: { woodwindsHigh: 1 },
+    harp: { harpPiano: 0.86 },
+    harpsichord: { harpPiano: 0.64 },
+    piano: { harpPiano: 1 },
+    strings: { violins1: 0.68, violins2: 0.64, violas: 0.54, cellos: 0.5, basses: 0.28 },
+    violin: { violins1: 1, violins2: 0.88, violas: 0.24 },
+    drums: { percussion: 0.9, timpani: 0.35 }
+  }
+};
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
@@ -122,9 +231,38 @@ let toastTimer = 0;
 let animationFrame = 0;
 let restartTimer = 0;
 
+const stageElementCache = {
+  nodes: new Map(),
+  rows: new Map(),
+  tracks: new Map(),
+  nodeLevels: new Map(),
+  trackLevels: new Map(),
+  liveStates: new Map()
+};
+const staticCanvasCache = {
+  waveform: null,
+  loudness: null
+};
+const themeValueCache = {
+  key: '',
+  values: new Map()
+};
+const impulseResponseCache = new Map();
+const hannWindowCache = new Map();
+const deepAudioModelState = {
+  loadPromise: null,
+  extractor: null,
+  model: null,
+  unavailable: false,
+  reason: ''
+};
+
 const SPATIAL_SLIDER_KEYS = ['width', 'depth', 'room', 'gain'];
 const SPATIAL_SLIDER_DEFAULTS = { width: 112, depth: 118, room: 46, gain: 100 };
 const REMASTER_SLIDER_ANIMATION_MS = 620;
+const PLAYBACK_TRANSPORT_UPDATE_MS = 80;
+const STAGE_ACTIVITY_UPDATE_MS = 32;
+const IMPULSE_RESPONSE_CACHE_LIMIT = 12;
 const RENDER_MODES = ['spatial', 'atmos', 'original'];
 const DEFAULT_CHANNEL_LAYOUT = 'stereo';
 const OUTPUT_CHANNEL_LAYOUTS = {
@@ -221,6 +359,8 @@ const state = {
   mode: 'spatial',
   offset: 0,
   startedAt: 0,
+  lastTransportUiAt: 0,
+  lastStageUiAt: 0,
   renderUrl: '',
   stagePositions: loadStagePositions(),
   stageDrag: null,
@@ -349,6 +489,7 @@ function toggleTheme() {
 function applyTheme(theme) {
   const nextTheme = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = nextTheme;
+  invalidateThemeValueCache();
   refs.themeToggle.setAttribute('aria-pressed', String(nextTheme === 'dark'));
   refs.themeToggle.setAttribute('aria-label', nextTheme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환');
   refs.themeToggleText.textContent = nextTheme === 'dark' ? 'Light' : 'Dark';
@@ -476,6 +617,11 @@ async function handleFile(file) {
     const sections = analyzeTimelineSections(mono, audioBuffer.sampleRate, 8);
     const tags = parseAudioTags(arrayBuffer, file);
     const stageLevels = estimateStageLevels(spectrum);
+    setBusy(true, 'AI instrument model analyzing');
+    const aiProfile = await analyzeWithDeepAudioModel(mono, audioBuffer.sampleRate);
+    await nextFrame();
+    const stageActivity = buildStageActivityTimeline({ spectrogram, tempo, loudness, zeroCrossing, stageLevels, aiProfile });
+    const stageDisplay = estimateInstrumentStageDisplay({ spectrum, tempo, loudness, zeroCrossing, stageLevels, stageActivity, aiProfile });
     const mixHealth = analyzeMixHealth({ loudness, spectrum, stereo, tempo, zeroCrossing });
     const traits = buildTraits({ loudness, tempo, spectrum, stereo, mixHealth });
     const remaster = buildRemasterProfile({ loudness, spectrum, stereo, tempo, mixHealth });
@@ -498,6 +644,13 @@ async function handleFile(file) {
       sections,
       tags,
       stageLevels,
+      stageLevelMap: Object.fromEntries(stageLevels.map((item) => [item.id, item.level])),
+      stageDisplayLevels: stageDisplay.levels,
+      stageDisplayLevelMap: Object.fromEntries(stageDisplay.levels.map((item) => [item.id, item.level])),
+      stageActiveMap: Object.fromEntries(stageDisplay.levels.map((item) => [item.id, item.active])),
+      instrumentProfile: stageDisplay.profile,
+      aiProfile,
+      stageActivity,
       traits,
       remaster,
       report,
@@ -509,6 +662,7 @@ async function handleFile(file) {
     };
 
     state.offset = 0;
+    invalidateStaticCanvasCache();
     applyAnalysis(state.analysis);
     setBusy(false, '분석 완료');
     document.body.classList.add('has-analysis');
@@ -817,17 +971,29 @@ function analyzeSpectrum(samples, sampleRate) {
 
 function makeSpectrogram(samples, sampleRate) {
   const fftSize = 2048;
-  const frameCount = 168;
+  const duration = samples.length / Math.max(1, sampleRate);
+  const frameCount = Math.min(360, Math.max(168, Math.floor(duration * 2)));
   const binCount = 124;
   const window = hannWindow(fftSize);
   const real = new Float32Array(fftSize);
   const imag = new Float32Array(fftSize);
+  const previousMagnitude = new Float32Array(fftSize / 2);
   const values = Array.from({ length: frameCount }, () => new Float32Array(binCount));
+  const bandFrames = Array.from({ length: frameCount }, () => new Float32Array(BAND_DEFS.length));
+  const instrumentFrames = Array.from({ length: frameCount }, () => new Float32Array(ORCHESTRA_SECTIONS.length));
+  const energyFrames = new Float32Array(frameCount);
+  const centroidFrames = new Float32Array(frameCount);
+  const flatnessFrames = new Float32Array(frameCount);
+  const fluxFrames = new Float32Array(frameCount);
   const maxStart = Math.max(0, samples.length - fftSize - 1);
   const binHz = sampleRate / fftSize;
+  const instrumentWeights = buildInstrumentSignatureWeights(fftSize, binHz);
   const minHz = 45;
   const maxHz = Math.min(16000, sampleRate / 2);
   let maxValue = 0;
+  let maxFrameEnergy = 0;
+  let maxFlux = 0;
+  let maxInstrumentValue = 0;
 
   for (let frame = 0; frame < frameCount; frame += 1) {
     const start = Math.floor((maxStart * frame) / Math.max(1, frameCount - 1));
@@ -837,6 +1003,58 @@ function makeSpectrogram(samples, sampleRate) {
       real[i] = (samples[start + i] || 0) * window[i];
     }
     fft(real, imag);
+
+    const bandEnergy = new Float32Array(BAND_DEFS.length);
+    const instrumentEnergy = new Float32Array(ORCHESTRA_SECTIONS.length);
+    let frameEnergy = 0;
+    let weighted = 0;
+    let geometric = 0;
+    let arithmetic = 0;
+    let flatnessCount = 0;
+    let flux = 0;
+
+    for (let bin = 1; bin < fftSize / 2; bin += 1) {
+      const freq = bin * binHz;
+      const mag = Math.hypot(real[bin], imag[bin]);
+      frameEnergy += mag;
+      weighted += mag * freq;
+      flux += Math.max(0, mag - previousMagnitude[bin]);
+      previousMagnitude[bin] = mag;
+      if (freq >= 80 && freq <= 12000 && mag > 0) {
+        geometric += Math.log(mag + 1e-12);
+        arithmetic += mag;
+        flatnessCount += 1;
+      }
+      for (let instrumentIndex = 0; instrumentIndex < instrumentWeights.length; instrumentIndex += 1) {
+        const weight = instrumentWeights[instrumentIndex][bin];
+        if (weight > 0) instrumentEnergy[instrumentIndex] += mag * weight;
+      }
+      for (let bandIndex = 0; bandIndex < BAND_DEFS.length; bandIndex += 1) {
+        const band = BAND_DEFS[bandIndex];
+        if (freq >= band.min && freq < band.max) {
+          bandEnergy[bandIndex] += mag;
+          break;
+        }
+      }
+    }
+
+    for (let bandIndex = 0; bandIndex < BAND_DEFS.length; bandIndex += 1) {
+      bandFrames[frame][bandIndex] = frameEnergy ? bandEnergy[bandIndex] / frameEnergy : 0;
+    }
+    for (let instrumentIndex = 0; instrumentIndex < ORCHESTRA_SECTIONS.length; instrumentIndex += 1) {
+      const compressedInstrument = Math.log10(1 + instrumentEnergy[instrumentIndex]);
+      instrumentFrames[frame][instrumentIndex] = compressedInstrument;
+      maxInstrumentValue = Math.max(maxInstrumentValue, compressedInstrument);
+    }
+    const compressedEnergy = Math.log10(1 + frameEnergy);
+    energyFrames[frame] = compressedEnergy;
+    centroidFrames[frame] = frameEnergy ? weighted / frameEnergy : 0;
+    flatnessFrames[frame] = flatnessCount
+      ? clamp(Math.exp(geometric / flatnessCount) / Math.max(arithmetic / flatnessCount, 1e-12), 0, 1)
+      : 0;
+    fluxFrames[frame] = flux;
+    maxFrameEnergy = Math.max(maxFrameEnergy, compressedEnergy);
+    maxFlux = Math.max(maxFlux, flux);
 
     for (let y = 0; y < binCount; y += 1) {
       const ratio = 1 - y / Math.max(1, binCount - 1);
@@ -857,7 +1075,55 @@ function makeSpectrogram(samples, sampleRate) {
     });
   }
 
-  return { values, frameCount, binCount, minHz, maxHz };
+  if (maxFrameEnergy > 0) {
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      energyFrames[frame] = clamp(energyFrames[frame] / maxFrameEnergy, 0, 1);
+    }
+  }
+  if (maxFlux > 0) {
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      fluxFrames[frame] = clamp(fluxFrames[frame] / maxFlux, 0, 1);
+    }
+    fluxFrames[0] = frameCount > 1 ? Math.min(fluxFrames[1], 0.82) : 0;
+  }
+  if (maxInstrumentValue > 0) {
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      for (let instrumentIndex = 0; instrumentIndex < ORCHESTRA_SECTIONS.length; instrumentIndex += 1) {
+        instrumentFrames[frame][instrumentIndex] = clamp(instrumentFrames[frame][instrumentIndex] / maxInstrumentValue, 0, 1);
+      }
+    }
+  }
+
+  return {
+    values,
+    frameCount,
+    binCount,
+    minHz,
+    maxHz,
+    bandFrames,
+    instrumentFrames,
+    energyFrames,
+    centroidFrames,
+    flatnessFrames,
+    fluxFrames
+  };
+}
+
+function buildInstrumentSignatureWeights(fftSize, binHz) {
+  return ORCHESTRA_SECTIONS.map((section) => {
+    const weights = new Float32Array(fftSize / 2);
+    const ranges = INSTRUMENT_SIGNATURES[section.id] || [];
+    ranges.forEach((range) => {
+      const startBin = Math.max(1, Math.floor(range.min / binHz));
+      const endBin = Math.min(weights.length - 1, Math.ceil(range.max / binHz));
+      const binCount = Math.max(1, endBin - startBin + 1);
+      const normalizedWeight = range.weight / binCount;
+      for (let bin = startBin; bin <= endBin; bin += 1) {
+        weights[bin] += normalizedWeight;
+      }
+    });
+    return weights;
+  });
 }
 
 function estimateKey(samples, sampleRate) {
@@ -1060,6 +1326,1327 @@ function estimateStageLevels(spectrum) {
       id: section.id,
       level: clamp(bandLevel * 0.72 + gainWeight * 0.22, 0.08, 1)
     };
+  });
+}
+
+function estimateInstrumentStageDisplay({ spectrum, tempo, loudness, zeroCrossing, stageLevels, stageActivity = null, aiProfile = null }) {
+  const profile = buildInstrumentProfile({ spectrum, tempo, loudness, zeroCrossing });
+  const selectedScores = applyAiToSelectedScores(selectActiveInstrumentScores(profile.scores, profile.features), profile.scores, profile.features, aiProfile);
+  const stageLevelMap = Object.fromEntries((stageLevels || []).map((item) => [item.id, item.level]));
+  const maxScore = Math.max(...Object.values(selectedScores), 1e-9);
+  const levels = ORCHESTRA_SECTIONS.map((section) => {
+    const dynamicLevel = stageActivity && stageActivity.maxLevels ? stageActivity.maxLevels[section.id] || 0 : 0;
+    const dynamicActive = stageActivity && stageActivity.activeMap ? stageActivity.activeMap[section.id] === true : false;
+    const score = selectedScores[section.id] || 0;
+    const globalConfidence = score > 0 ? clamp(score / maxScore, 0.18, 1) : 0;
+    let active = dynamicActive || score > 0;
+    if (isWindSectionId(section.id) && score <= 0) {
+      const windConfidence = getWindFeatureForId(profile.features, section.id);
+      active = dynamicActive && dynamicLevel >= 0.42 && windConfidence >= getWindProtectionThreshold(section.id);
+    } else if (section.id === 'harpPiano' && score <= 0) {
+      active = dynamicActive &&
+        dynamicLevel >= 0.52 &&
+        (profile.features.pianoConfidence || 0) >= 0.68 &&
+        (
+          (profile.features.pianoPercussiveGate || 0) >= 0.62 ||
+          (profile.features.pianoHammerEvidence || 0) >= 0.78 ||
+          profile.features.rangeCoverage > 0.82
+        );
+    }
+    const confidence = active ? Math.max(globalConfidence, dynamicLevel) : 0;
+    const sourceLevel = Number.isFinite(stageLevelMap[section.id]) ? stageLevelMap[section.id] : 0;
+    return {
+      id: section.id,
+      active,
+      confidence,
+      level: active ? clamp(sourceLevel * 0.28 + confidence * 0.72, 0.12, 1) : 0
+    };
+  });
+
+  return {
+    levels,
+    profile: {
+      ...profile,
+      dynamicActiveIds: stageActivity && stageActivity.activeIds ? stageActivity.activeIds : [],
+      ai: summarizeAiInstrumentProfile(aiProfile),
+      activeIds: levels.filter((item) => item.active).map((item) => item.id)
+    }
+  };
+}
+
+function buildStageActivityTimeline({ spectrogram, tempo, loudness, zeroCrossing, stageLevels, aiProfile = null }) {
+  const frameCount = spectrogram && spectrogram.frameCount ? spectrogram.frameCount : 0;
+  const stageLevelMap = Object.fromEntries((stageLevels || []).map((item) => [item.id, item.level]));
+  const levelsBySection = Object.fromEntries(ORCHESTRA_SECTIONS.map((section) => [
+    section.id,
+    new Float32Array(frameCount)
+  ]));
+  if (!frameCount || !spectrogram.bandFrames || !spectrogram.energyFrames) {
+    return {
+      frameCount: 0,
+      levelsBySection,
+      maxLevels: {},
+      activeMap: {},
+      activeIds: []
+    };
+  }
+
+  let pianoFrameMemory = 0;
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const energy = spectrogram.energyFrames[frame] || 0;
+    if (energy < 0.025) continue;
+    const frameSpectrum = buildFrameSpectrum(spectrogram, frame);
+    const frameFlux = spectrogram.fluxFrames ? spectrogram.fluxFrames[frame] || 0 : 0;
+    const signatureScores = getFrameInstrumentSignatureScores(spectrogram, frame);
+    const frameProfile = buildInstrumentProfile({
+      spectrum: frameSpectrum,
+      tempo: { onsetDensity: Math.max((tempo && tempo.onsetDensity ? tempo.onsetDensity : 0) * 0.2, frameFlux * 7.2) },
+      loudness: {
+        crest: 8 + frameFlux * 14,
+        energyScore: energy
+      },
+      zeroCrossing: { rate: Math.max((zeroCrossing && zeroCrossing.rate ? zeroCrossing.rate : 0) * 0.45, (frameSpectrum.flatness || 0) * 0.24) }
+    });
+    const combinedScores = combineInstrumentScores(frameProfile.scores, signatureScores, frameProfile.features);
+    const keyboardTransient = isKeyboardTransientFrame(combinedScores, signatureScores, frameProfile.features);
+    let activeScores = keyboardTransient
+      ? selectKeyboardFrameScores(combinedScores, frameProfile.features)
+      : selectFrameInstrumentScores(combinedScores, frameProfile.features);
+    const pianoSignature = signatureScores.harpPiano || 0;
+    const pianoContinuation = (
+      pianoFrameMemory > 0.16 &&
+      pianoSignature > 0.42 &&
+      frameProfile.features.transient < 0.32
+    );
+    if (keyboardTransient || pianoContinuation) {
+      activeScores = { ...activeScores };
+      activeScores.harpPiano = Math.max(
+        activeScores.harpPiano || 0,
+        combinedScores.harpPiano || 0,
+        pianoSignature * (pianoContinuation ? 0.82 : 0.92)
+      );
+      if (pianoContinuation) {
+        ['woodwindsLow', 'horns', 'brass'].forEach((id) => {
+          if ((activeScores[id] || 0) < activeScores.harpPiano * 1.18) delete activeScores[id];
+        });
+        if ((activeScores.woodwindsHigh || 0) < activeScores.harpPiano * 0.94 && (frameProfile.features.woodwindHighConfidence || 0) < 0.68) {
+          delete activeScores.woodwindsHigh;
+        }
+      }
+    }
+    activeScores = applyAiToFrameScores(activeScores, combinedScores, signatureScores, frameProfile.features, aiProfile);
+    pianoFrameMemory = clamp((keyboardTransient ? 0.9 : pianoFrameMemory * 0.86) + (activeScores.harpPiano ? 0.08 : 0), 0, 1);
+    const maxFrameScore = Math.max(...Object.values(activeScores), 1e-9);
+
+    Object.entries(activeScores).forEach(([id, score]) => {
+      const section = ORCHESTRA_BY_ID[id];
+      if (!section) return;
+      const sourceLevel = Number.isFinite(stageLevelMap[id]) ? stageLevelMap[id] : 0.5;
+      const confidence = clamp(score / maxFrameScore, 0, 1);
+      const bandBoost = getFrameBandStrength(frameSpectrum, section.band);
+      const signatureBoost = signatureScores[id] || 0;
+      levelsBySection[id][frame] = clamp(
+        energy * (0.22 + confidence * 0.5 + bandBoost * 0.1 + signatureBoost * 0.18) * (0.74 + sourceLevel * 0.26),
+        0,
+        1
+      );
+    });
+  }
+
+  ORCHESTRA_SECTIONS.forEach((section) => {
+    smoothStageActivity(levelsBySection[section.id]);
+  });
+
+  const maxLevels = {};
+  const activeMap = {};
+  const activeIds = [];
+  ORCHESTRA_SECTIONS.forEach((section) => {
+    const levels = levelsBySection[section.id];
+    let maxLevel = 0;
+    let activeFrames = 0;
+    for (let frame = 0; frame < levels.length; frame += 1) {
+      const level = levels[frame];
+      maxLevel = Math.max(maxLevel, level);
+      if (level >= 0.085) activeFrames += 1;
+    }
+    maxLevels[section.id] = maxLevel;
+    const threshold = getStageActivationThreshold(section.id);
+    const active = maxLevel >= threshold.level && (activeFrames >= threshold.frames || maxLevel >= threshold.peak);
+    activeMap[section.id] = active;
+    if (active) activeIds.push(section.id);
+  });
+
+  return {
+    frameCount,
+    levelsBySection,
+    maxLevels,
+    activeMap,
+    activeIds
+  };
+}
+
+function getStageActivationThreshold(sectionId) {
+  const strict = {
+    harpPiano: { level: 0.52, frames: 2, peak: 0.58 },
+    basses: { level: 0.84, frames: 6, peak: 0.9 },
+    woodwindsHigh: { level: 0.34, frames: 4, peak: 0.46 },
+    woodwindsLow: { level: 0.34, frames: 4, peak: 0.46 },
+    horns: { level: 0.38, frames: 5, peak: 0.52 },
+    brass: { level: 0.32, frames: 4, peak: 0.46 },
+    timpani: { level: 0.68, frames: 5, peak: 0.78 },
+    percussion: { level: 0.38, frames: 4, peak: 0.52 }
+  };
+  return strict[sectionId] || { level: 0.2, frames: 3, peak: 0.36 };
+}
+
+function isKeyboardTransientFrame(scores, signatureScores, features) {
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  const pianoGate = features.pianoPercussiveGate || 0;
+  const pianoEvidence = (features.pianoHammerEvidence || 0) > 0.12 ||
+    features.rangeCoverage > 0.78 ||
+    features.lowRegister < 0.74;
+  return (
+    pianoConfidence > 0.52 &&
+    pianoGate > 0.18 &&
+    pianoEvidence &&
+    features.rangeCoverage > 0.42 &&
+    features.noisy < 0.72 &&
+    ((scores.harpPiano || 0) > 0.28 || (signatureScores.harpPiano || 0) > 0.16)
+  );
+}
+
+function selectKeyboardFrameScores(scores, features) {
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  const selected = { harpPiano: Math.max(scores.harpPiano || 0, 0.44 + pianoConfidence * 0.26) };
+  if (features.stringConfidence > 0.58 && features.transient < 0.52) {
+    const followerRatio = pianoConfidence > 0.68 ? 0.8 : 0.64;
+    ['violins1', 'violins2', 'violas', 'cellos']
+      .map((id) => [id, scores[id] || 0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .forEach(([id, score]) => {
+        if (score >= selected.harpPiano * followerRatio) selected[id] = score;
+      });
+  }
+  return selected;
+}
+
+function getFrameInstrumentSignatureScores(spectrogram, frame) {
+  const frameValues = spectrogram && spectrogram.instrumentFrames ? spectrogram.instrumentFrames[frame] : null;
+  const scores = {};
+  ORCHESTRA_SECTIONS.forEach((section, index) => {
+    scores[section.id] = frameValues ? frameValues[index] || 0 : 0;
+  });
+  return scores;
+}
+
+function isWindSectionId(id) {
+  return id === 'woodwindsHigh' || id === 'woodwindsLow' || id === 'horns' || id === 'brass';
+}
+
+function getWindFeatureForId(features, id) {
+  const windMap = {
+    woodwindsHigh: features.woodwindHighConfidence || 0,
+    woodwindsLow: features.woodwindLowConfidence || 0,
+    horns: features.hornConfidence || 0,
+    brass: features.brassConfidence || 0
+  };
+  return windMap[id] || 0;
+}
+
+function getStrongestWindScore(scores) {
+  return ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass']
+    .map((id) => [id, scores[id] || 0])
+    .sort((a, b) => b[1] - a[1])[0] || ['', 0];
+}
+
+function getWindProtectionThreshold(id) {
+  const thresholds = {
+    woodwindsHigh: 0.52,
+    woodwindsLow: 0.82,
+    horns: 0.82,
+    brass: 0.72
+  };
+  return thresholds[id] || 0.74;
+}
+
+function hasProtectedWindLead(features, id) {
+  return getWindFeatureForId(features, id) >= getWindProtectionThreshold(id);
+}
+
+function hasProtectedStringLead(features) {
+  const violinConfidence = features.violinConfidence || 0;
+  const bowedStringConfidence = features.bowedStringConfidence || features.stringConfidence || 0;
+  const staccatoConfidence = features.stringStaccatoConfidence || 0;
+  const pianoStrike = hasPianoStrike(features);
+  return (
+    (
+      bowedStringConfidence >= 0.58 &&
+      violinConfidence >= 0.48 &&
+      (features.transient || 0) < 0.48
+    ) ||
+    (
+      staccatoConfidence >= 0.5 &&
+      violinConfidence >= 0.34 &&
+      (features.transient || 0) < 0.78 &&
+      (!pianoStrike || staccatoConfidence >= 0.62)
+    )
+  );
+}
+
+function hasPianoStrike(features) {
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  return (
+    pianoConfidence >= 0.6 &&
+    (features.pianoPercussiveGate || 0) >= 0.52 &&
+    (features.pianoHammerEvidence || 0) >= 0.48 &&
+    (features.noisy || 0) < 0.72
+  );
+}
+
+function hasProtectedPianoLead(features) {
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  return (
+    pianoConfidence >= 0.54 &&
+    (features.pianoPercussiveGate || 0) >= 0.38 &&
+    (features.pianoHammerEvidence || 0) >= 0.42 &&
+    (features.rangeCoverage || 0) >= 0.42 &&
+    (features.noisy || 0) < 0.68 &&
+    (features.stringStaccatoConfidence || 0) < 0.55 &&
+    !hasProtectedStringLead(features)
+  );
+}
+
+function combineInstrumentScores(profileScores, signatureScores, features) {
+  const combined = {};
+  ORCHESTRA_SECTIONS.forEach((section) => {
+    const profile = profileScores[section.id] || 0;
+    let signature = signatureScores[section.id] || 0;
+    if (section.id === 'harpPiano') {
+      const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+      if (pianoConfidence > 0.52) signature = Math.max(signature, pianoConfidence * 0.76);
+      if (pianoConfidence < 0.48 && features.transient < 0.22) signature *= 0.6;
+      if ((features.pianoHammerEvidence || 0) < 0.08 && features.lowRegister > 0.78 && features.rangeCoverage < 0.74) {
+        signature *= 0.48;
+      }
+      if ((features.windConfidence || 0) > pianoConfidence + 0.12 && (features.pianoHammerEvidence || 0) < 0.78) {
+        signature *= 0.58;
+      }
+    } else if (isWindSectionId(section.id)) {
+      const windFeature = getWindFeatureForId(features, section.id);
+      if (windFeature > 0.48) signature = Math.max(signature, windFeature * 0.8);
+      if ((features.windConfidence || 0) < 0.38 && signature < 0.24) signature *= 0.72;
+      const pianoStrike = hasPianoStrike(features);
+      if (pianoStrike && !hasProtectedWindLead(features, section.id)) signature *= 0.48;
+      if (hasProtectedStringLead(features)) signature *= 0.52;
+    }
+    const signatureWeight = section.id === 'harpPiano'
+      ? 0.5
+      : isWindSectionId(section.id)
+        ? 0.54
+        : section.id === 'percussion' || section.id === 'timpani' ? 0.58 : 0.46;
+    let score = profile * (1 - signatureWeight) + signature * signatureWeight;
+    if (signature > 0.62) score = Math.max(score, signature * 0.86);
+    if (signature < 0.18 && profile < 0.56) score *= 0.62;
+    if (isWindSectionId(section.id)) {
+      const windFeature = getWindFeatureForId(features, section.id);
+      const pianoStrike = hasPianoStrike(features);
+      if (pianoStrike && !hasProtectedWindLead(features, section.id)) score *= 0.58;
+      if (hasProtectedStringLead(features)) score *= clamp(0.42 + windFeature * 0.22, 0.42, 0.64);
+    } else if (section.id === 'harpPiano' && (features.windConfidence || 0) > (features.pianoConfidence || 0) + 0.12 && (features.pianoHammerEvidence || 0) < 0.78) {
+      score *= 0.72;
+    } else if (section.id === 'harpPiano' && hasProtectedStringLead(features)) {
+      score *= 0.46;
+    }
+    combined[section.id] = clamp(score, 0, 1);
+  });
+
+  const piano = combined.harpPiano || 0;
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  if (piano > 0.56 && pianoConfidence > 0.52) {
+    ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass'].forEach((id) => {
+      const protection = getWindFeatureForId(features, id);
+      combined[id] *= clamp(0.62 + protection * 0.38, 0.62, 1);
+    });
+  }
+
+  if (features.stringConfidence > 0.62 && features.transient < 0.42) {
+    ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass'].forEach((id) => {
+      const protection = getWindFeatureForId(features, id);
+      combined[id] *= clamp(0.54 + protection * 0.4, 0.54, 0.98);
+    });
+  }
+
+  if (features.lowRegister > 0.45 && features.stringConfidence > 0.55) {
+    ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass'].forEach((id) => {
+      const protection = getWindFeatureForId(features, id);
+      combined[id] *= clamp(0.42 + protection * 0.48, 0.42, 0.96);
+    });
+    if (features.transient < 0.36) combined.timpani *= 0.35;
+  }
+
+  if (features.transient < 0.42 || features.noisy < 0.38) {
+    combined.timpani *= 0.48;
+    combined.percussion *= 0.42;
+  }
+
+  return combined;
+}
+
+function buildFrameSpectrum(spectrogram, frame) {
+  const bands = BAND_DEFS.map((band, index) => ({
+    ...band,
+    percent: spectrogram.bandFrames[frame][index] || 0,
+    energy: spectrogram.bandFrames[frame][index] || 0
+  }));
+  const bandMap = Object.fromEntries(bands.map((band) => [band.key, band.percent]));
+  return {
+    magnitudes: null,
+    binHz: 0,
+    maxMagnitude: 1,
+    bands,
+    centroid: spectrogram.centroidFrames ? spectrogram.centroidFrames[frame] || 0 : 0,
+    spread: 0,
+    rolloff: 0,
+    brightness: (bandMap.presence || 0) + (bandMap.air || 0),
+    warmth: (bandMap.sub || 0) + (bandMap.bass || 0),
+    flatness: spectrogram.flatnessFrames ? spectrogram.flatnessFrames[frame] || 0 : 0,
+    flux: spectrogram.fluxFrames ? spectrogram.fluxFrames[frame] || 0 : 0
+  };
+}
+
+function getFrameBandStrength(frameSpectrum, bandKey) {
+  const bands = frameSpectrum.bands || [];
+  const maxBand = Math.max(...bands.map((band) => band.percent), 1e-9);
+  const item = bands.find((band) => band.key === bandKey);
+  return item ? clamp(Math.sqrt((item.percent || 0) / maxBand), 0, 1) : 0;
+}
+
+function smoothStageActivity(levels) {
+  let previous = 0;
+  for (let i = 0; i < levels.length; i += 1) {
+    const target = levels[i];
+    const alpha = target > previous ? 0.68 : 0.55;
+    previous += (target - previous) * alpha;
+    levels[i] = previous < 0.025 ? 0 : previous;
+  }
+}
+
+function buildInstrumentProfile({ spectrum, tempo, loudness, zeroCrossing }) {
+  const bandMap = Object.fromEntries(spectrum.bands.map((band) => [band.key, band.percent]));
+  const maxBand = Math.max(...spectrum.bands.map((band) => band.percent), 1e-9);
+  const strength = (key) => Math.sqrt((bandMap[key] || 0) / maxBand);
+  const sub = bandMap.sub || 0;
+  const bass = bandMap.bass || 0;
+  const lowMid = bandMap.lowMid || 0;
+  const mid = bandMap.mid || 0;
+  const presence = bandMap.presence || 0;
+  const air = bandMap.air || 0;
+  const low = sub + bass;
+  const body = lowMid + mid;
+  const upper = presence + air;
+  const spectralImpulse = spectrum.magnitudes
+    ? clamp((((spectrum.flux || 0) / Math.max(spectrum.maxMagnitude || 1, 1)) - 0.38) / 1.6, 0, 1)
+    : clamp(((spectrum.flux || 0) - 0.08) / 0.72, 0, 1);
+  const onsetImpulse = clamp((tempo && tempo.onsetDensity ? tempo.onsetDensity : 0) / 6.5, 0, 1);
+  const crestImpulse = clamp(((loudness && loudness.crest ? loudness.crest : 0) - 8) / 16, 0, 1);
+  const transient = clamp(
+    onsetImpulse * 0.48 +
+      crestImpulse * 0.3 +
+      spectralImpulse * 0.22,
+    0,
+    1
+  );
+  const tonal = clamp(1 - (spectrum.flatness || 0) * 2.1, 0, 1);
+  const noisy = clamp((spectrum.flatness || 0) * 2.4 + ((zeroCrossing && zeroCrossing.rate) || 0) * 1.2, 0, 1);
+  const sustain = clamp(1 - transient * 0.72, 0, 1);
+  const centroidHigh = clamp((spectrum.centroid - 700) / 3400, 0, 1);
+  const centroidLow = clamp(1 - (spectrum.centroid - 150) / 1700, 0, 1);
+  const rangeCoverage = clamp((
+    clamp(low / 0.14, 0, 1) +
+    clamp(body / 0.36, 0, 1) +
+    clamp(upper / 0.18, 0, 1)
+  ) / 3, 0, 1);
+  const pianoBandBalance = weightedScore([
+    [rangeCoverage, 0.3],
+    [strength('mid'), 0.18],
+    [strength('presence'), 0.16],
+    [Math.max(strength('bass'), strength('lowMid')), 0.14],
+    [Math.max(strength('air'), strength('lowMid')), 0.08],
+    [tonal, 0.14]
+  ]);
+  const hammerBand = clamp((presence + air * 0.7) / 0.018, 0, 1);
+  const pianoHammerEvidence = clamp(hammerBand * (0.28 + spectralImpulse * 0.42 + transient * 0.3), 0, 1);
+  const pianoAttack = clamp(
+    (transient * 0.52 + spectralImpulse * 0.48) * (0.48 + pianoHammerEvidence * 0.52),
+    0,
+    1
+  );
+  const pianoPercussiveGate = clamp(
+    (spectralImpulse * 0.48 + transient * 0.28) * (0.36 + pianoHammerEvidence * 0.64) +
+      clamp(upper / 0.12, 0, 1) * 0.12 +
+      pianoHammerEvidence * 0.12,
+    0,
+    1
+  );
+  const lowBowedPenalty = clamp((centroidLow - 0.72) / 0.25, 0, 1) *
+    (1 - pianoHammerEvidence) *
+    clamp((bass + lowMid) / 0.55, 0, 1) *
+    0.34;
+  const sustainedHighStringEvidence = clamp(weightedScore([
+    [strength('presence'), 0.28],
+    [strength('air'), 0.2],
+    [centroidHigh, 0.18],
+    [tonal, 0.18],
+    [sustain, 0.12],
+    [clamp(1 - low / 0.28, 0, 1), 0.04]
+  ]) * clamp(1 - transient * 1.28, 0, 1), 0, 1);
+  let pianoConfidence = clamp(
+    pianoBandBalance * 0.3 +
+      pianoAttack * 0.36 +
+      tonal * 0.12 +
+      clamp((body + upper) / 0.48, 0, 1) * 0.1 +
+      pianoPercussiveGate * 0.12 -
+      noisy * 0.14 -
+      lowBowedPenalty -
+      sustainedHighStringEvidence * 0.32,
+    0,
+    1
+  );
+  const keyboardBase = clamp(
+    rangeCoverage * 0.28 +
+      transient * 0.42 +
+      tonal * 0.12 +
+      clamp(body / 0.48, 0, 1) * 0.08 +
+      strength('bass') * 0.1 -
+      noisy * 0.16,
+    0,
+    1
+  );
+  const keyboardConfidence = clamp(Math.max(keyboardBase, pianoConfidence * 0.94), 0, 1);
+  const stringConfidence = clamp(weightedScore([
+    [strength('presence'), 0.26],
+    [strength('mid'), 0.24],
+    [strength('lowMid'), 0.24],
+    [tonal, 0.16],
+    [sustain, 0.1]
+  ]) * sustain * (1 - transient * 0.25), 0, 1);
+  const violinConfidence = clamp(weightedScore([
+    [sustainedHighStringEvidence, 0.28],
+    [strength('presence'), 0.24],
+    [centroidHigh, 0.18],
+    [tonal, 0.14],
+    [sustain, 0.1],
+    [strength('air'), 0.06]
+  ]) * clamp(1 - pianoPercussiveGate * 0.34, 0.48, 1) - noisy * 0.06, 0, 1);
+  const stringStaccatoConfidence = clamp(weightedScore([
+    [transient, 0.2],
+    [strength('presence'), 0.22],
+    [centroidHigh, 0.16],
+    [tonal, 0.16],
+    [clamp(1 - centroidLow * 0.95, 0, 1), 0.12],
+    [clamp(1 - low / 0.24, 0, 1), 0.08],
+    [strength('air'), 0.06]
+  ]) * clamp(1 - noisy * 0.42, 0.48, 1) * clamp(1 - centroidLow * 0.72, 0.34, 1), 0, 1);
+  const bowedStringConfidence = clamp(Math.max(stringConfidence, violinConfidence * 0.94, stringStaccatoConfidence * 0.86), 0, 1);
+  const lowSparse = clamp(1 - low / 0.26, 0, 1);
+  const airSparse = clamp(1 - air / 0.16, 0, 1);
+  const energy = loudness ? loudness.energyScore : 0.5;
+  const windSustain = clamp(sustain * 0.78 + tonal * 0.14 + (1 - transient) * 0.08, 0, 1);
+  const breathAir = clamp(strength('air') * 0.62 + clamp(air / 0.055, 0, 1) * 0.26 + noisy * 0.12, 0, 1);
+  const pianoStrikePenalty = clamp(
+    pianoPercussiveGate * pianoConfidence * clamp(1 - breathAir * 0.48, 0, 1),
+    0,
+    0.44
+  );
+  const highWoodwindCentroid = clamp((spectrum.centroid - 820) / 3200, 0, 1);
+  const lowWoodwindCentroid = clamp(1 - Math.abs(spectrum.centroid - 1050) / 1750, 0, 1);
+  const hornCentroid = clamp(1 - Math.abs(spectrum.centroid - 780) / 1350, 0, 1);
+  const brassCentroid = clamp((spectrum.centroid - 780) / 2800, 0, 1);
+  const woodwindHighConfidence = clamp(weightedScore([
+    [strength('presence'), 0.28],
+    [breathAir, 0.16],
+    [highWoodwindCentroid, 0.16],
+    [lowSparse, 0.13],
+    [tonal, 0.11],
+    [windSustain, 0.1],
+    [clamp(1 - pianoPercussiveGate * 0.75, 0, 1), 0.06]
+  ]) - clamp(low / 0.34, 0, 1) * 0.1 - pianoStrikePenalty * 0.18, 0, 1);
+  const woodwindLowConfidence = clamp(weightedScore([
+    [strength('mid'), 0.3],
+    [strength('lowMid'), 0.2],
+    [lowWoodwindCentroid, 0.16],
+    [lowSparse, 0.1],
+    [tonal, 0.1],
+    [windSustain, 0.1],
+    [clamp(1 - pianoPercussiveGate * 0.56, 0, 1), 0.04]
+  ]) - clamp(sub / 0.12, 0, 1) * 0.08 - pianoStrikePenalty * 0.22, 0, 1);
+  const hornConfidence = clamp(weightedScore([
+    [strength('lowMid'), 0.26],
+    [strength('mid'), 0.22],
+    [hornCentroid, 0.18],
+    [energy, 0.12],
+    [tonal, 0.1],
+    [windSustain, 0.08],
+    [clamp(1 - air / 0.12, 0, 1), 0.04]
+  ]) - clamp(sub / 0.2, 0, 1) * 0.08 - pianoStrikePenalty * 0.16, 0, 1);
+  const brassEdge = clamp(
+    strength('presence') * 0.44 +
+      strength('mid') * 0.22 +
+      brassCentroid * 0.16 +
+      energy * 0.12 +
+      clamp(1 - airSparse, 0, 1) * 0.06,
+    0,
+    1
+  );
+  const brassConfidence = clamp(weightedScore([
+    [brassEdge, 0.38],
+    [strength('presence'), 0.22],
+    [energy, 0.14],
+    [tonal, 0.1],
+    [clamp(1 - lowSparse * 0.5, 0, 1), 0.08],
+    [windSustain, 0.08]
+  ]) - noisy * 0.12 - pianoStrikePenalty * 0.12, 0, 1);
+  const windConfidence = Math.max(woodwindHighConfidence, woodwindLowConfidence, hornConfidence, brassConfidence);
+  const windProtectionById = {
+    woodwindsHigh: woodwindHighConfidence,
+    woodwindsLow: woodwindLowConfidence,
+    horns: hornConfidence,
+    brass: brassConfidence
+  };
+  const ensembleDensity = clamp(
+    rangeCoverage * 0.34 +
+      clamp(body / 0.55, 0, 1) * 0.22 +
+      clamp(upper / 0.32, 0, 1) * 0.2 +
+      energy * 0.14 +
+      (1 - lowSparse) * 0.1,
+    0,
+    1
+  );
+
+  const scores = {
+    violins1: weightedScore([
+      [violinConfidence, 0.34],
+      [strength('presence'), 0.26],
+      [stringStaccatoConfidence, 0.16],
+      [strength('air'), 0.12],
+      [centroidHigh, 0.08],
+      [tonal, 0.04]
+    ]),
+    violins2: weightedScore([
+      [violinConfidence, 0.26],
+      [strength('mid'), 0.3],
+      [strength('presence'), 0.18],
+      [stringStaccatoConfidence, 0.14],
+      [centroidHigh, 0.1],
+      [tonal, 0.02]
+    ]),
+    violas: weightedScore([
+      [strength('mid'), 0.42],
+      [strength('lowMid'), 0.24],
+      [tonal, 0.16],
+      [sustain, 0.12],
+      [clamp(1 - centroidHigh * 0.55, 0, 1), 0.06]
+    ]),
+    cellos: weightedScore([
+      [strength('lowMid'), 0.48],
+      [strength('bass'), 0.2],
+      [centroidLow, 0.08],
+      [tonal, 0.14],
+      [sustain, 0.1]
+    ]),
+    basses: weightedScore([
+      [strength('bass'), 0.42],
+      [strength('sub'), 0.26],
+      [centroidLow, 0.2],
+      [airSparse, 0.08],
+      [sustain, 0.04]
+    ]),
+    woodwindsHigh: weightedScore([
+      [woodwindHighConfidence, 0.5],
+      [strength('presence'), 0.18],
+      [breathAir, 0.12],
+      [lowSparse, 0.08],
+      [windSustain, 0.08],
+      [tonal, 0.04]
+    ]),
+    woodwindsLow: weightedScore([
+      [woodwindLowConfidence, 0.5],
+      [strength('mid'), 0.2],
+      [strength('lowMid'), 0.12],
+      [lowWoodwindCentroid, 0.08],
+      [windSustain, 0.06],
+      [tonal, 0.04]
+    ]),
+    horns: weightedScore([
+      [hornConfidence, 0.52],
+      [strength('lowMid'), 0.18],
+      [strength('mid'), 0.12],
+      [hornCentroid, 0.08],
+      [energy, 0.06],
+      [windSustain, 0.04]
+    ]),
+    brass: weightedScore([
+      [brassConfidence, 0.52],
+      [brassEdge, 0.16],
+      [strength('presence'), 0.14],
+      [centroidHigh, 0.08],
+      [energy, 0.06],
+      [tonal, 0.04]
+    ]),
+    timpani: weightedScore([
+      [strength('sub'), 0.34],
+      [strength('bass'), 0.34],
+      [transient, 0.16],
+      [airSparse, 0.1],
+      [centroidLow, 0.06]
+    ]),
+    percussion: weightedScore([
+      [strength('air'), 0.3],
+      [transient, 0.3],
+      [noisy, 0.18],
+      [centroidHigh, 0.14],
+      [energy, 0.08]
+    ]),
+    harpPiano: weightedScore([
+      [pianoConfidence, 0.36],
+      [rangeCoverage, 0.18],
+      [pianoAttack, 0.18],
+      [tonal, 0.1],
+      [Math.max(strength('bass'), strength('presence')), 0.1],
+      [strength('mid'), 0.08],
+    ])
+  };
+
+  const pianoLikely = pianoConfidence > 0.56 && (
+    pianoPercussiveGate > 0.22 ||
+    rangeCoverage > 0.76 ||
+    strength('presence') > 0.38 ||
+    pianoHammerEvidence > 0.24
+  );
+
+  if (hasProtectedStringLead({ violinConfidence, bowedStringConfidence, stringStaccatoConfidence, transient, pianoConfidence, pianoPercussiveGate, pianoHammerEvidence, noisy })) {
+    scores.violins1 = clamp(Math.max(scores.violins1, violinConfidence * 0.92), 0, 1);
+    scores.violins2 = clamp(Math.max(scores.violins2, violinConfidence * 0.78), 0, 1);
+    scores.violas = clamp(Math.max(scores.violas, bowedStringConfidence * 0.48), 0, 1);
+    scores.harpPiano *= clamp(0.52 - violinConfidence * 0.18, 0.28, 0.52);
+    ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass'].forEach((id) => {
+      scores[id] *= clamp(0.38 + (windProtectionById[id] || 0) * 0.24, 0.38, 0.68);
+    });
+  }
+
+  if (stringStaccatoConfidence > 0.5) {
+    scores.violins1 = clamp(Math.max(scores.violins1, stringStaccatoConfidence * 0.94), 0, 1);
+    scores.violins2 = clamp(Math.max(scores.violins2, stringStaccatoConfidence * 0.78), 0, 1);
+    scores.violas = clamp(Math.max(scores.violas, stringStaccatoConfidence * 0.42), 0, 1);
+    scores.harpPiano *= clamp(0.42 - stringStaccatoConfidence * 0.12, 0.24, 0.42);
+    ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass'].forEach((id) => {
+      scores[id] *= clamp(0.42 + (windProtectionById[id] || 0) * 0.18, 0.42, 0.64);
+    });
+  }
+
+  if (stringConfidence > 0.48 && transient < 0.34 && !pianoLikely) {
+    const highStringBias = clamp((presence - lowMid * 0.75) / 0.18, 0, 1);
+    ['violins1', 'violins2', 'violas', 'cellos', 'basses'].forEach((id) => {
+      scores[id] = clamp(scores[id] * (1 + stringConfidence * 0.16), 0, 1);
+    });
+    scores.violins1 = clamp(scores.violins1 * (1 + highStringBias * 0.24), 0, 1);
+    scores.violins2 = clamp(scores.violins2 * (1 + highStringBias * 0.14), 0, 1);
+    scores.violas *= 1 - highStringBias * 0.24;
+    ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass'].forEach((id) => {
+      const protection = windProtectionById[id] || 0;
+      scores[id] *= 1 - stringConfidence * (protection > 0.52 ? 0.08 : 0.28);
+    });
+    scores.harpPiano *= 1 - stringConfidence * 0.36;
+  } else if (pianoLikely) {
+    const stringReduction = 1 - pianoConfidence * (pianoPercussiveGate > 0.32 ? 0.46 : 0.3);
+    ['violins1', 'violins2', 'violas', 'cellos', 'basses'].forEach((id) => {
+      scores[id] *= stringReduction;
+    });
+  }
+
+  if (keyboardConfidence > 0.52) {
+    const reduction = 1 - keyboardConfidence * (pianoLikely ? 0.48 : 0.34);
+    Object.keys(scores).forEach((id) => {
+      if (id === 'harpPiano' || id === 'percussion' || id === 'timpani') return;
+      if (isWindSectionId(id)) {
+        const protection = windProtectionById[id] || 0;
+        const windReduction = 1 - keyboardConfidence * (protection > 0.52 ? 0.12 : pianoLikely ? 0.28 : 0.22);
+        scores[id] *= windReduction;
+        return;
+      }
+      scores[id] *= reduction;
+    });
+    scores.harpPiano = clamp(Math.max(scores.harpPiano, pianoConfidence * 0.84) + keyboardConfidence * 0.14, 0, 1);
+  }
+
+  return {
+    scores,
+    features: {
+      transient,
+      tonal,
+      noisy,
+      rangeCoverage,
+      keyboardConfidence,
+      pianoConfidence,
+      pianoAttack,
+      pianoPercussiveGate,
+      pianoHammerEvidence,
+      woodwindHighConfidence,
+      woodwindLowConfidence,
+      hornConfidence,
+      brassConfidence,
+      windConfidence,
+      stringConfidence,
+      violinConfidence,
+      bowedStringConfidence,
+      sustainedHighStringEvidence,
+      stringStaccatoConfidence,
+      lowRegister: centroidLow,
+      ensembleDensity
+    }
+  };
+}
+
+function selectStringInstrumentScores(scores, features, maxScore) {
+  if (!hasProtectedStringLead(features)) return null;
+  const entries = ['violins1', 'violins2', 'violas', 'cellos', 'basses']
+    .map((id) => [id, scores[id] || 0])
+    .sort((a, b) => b[1] - a[1]);
+  const [bestId, bestScore] = entries[0] || ['', 0];
+  if (!bestScore) return null;
+  const violinConfidence = features.violinConfidence || 0;
+  const requiredRatio = violinConfidence > 0.68 ? 0.34 : 0.46;
+  if (bestScore < maxScore * requiredRatio) return null;
+
+  const selected = {};
+  const staccatoConfidence = features.stringStaccatoConfidence || 0;
+  const maxCount = violinConfidence > 0.64 || staccatoConfidence > 0.58 ? 3 : 2;
+  const followerRatio = violinConfidence > 0.64 || staccatoConfidence > 0.58 ? 0.48 : 0.58;
+  entries.slice(0, maxCount).forEach(([id, score]) => {
+    if (score >= bestScore * followerRatio) selected[id] = score;
+  });
+
+  if (violinConfidence > 0.5 || staccatoConfidence > 0.5) {
+    const lead = Math.max(violinConfidence, staccatoConfidence);
+    selected.violins1 = Math.max(selected.violins1 || 0, scores.violins1 || 0, lead * 0.88);
+    selected.violins2 = Math.max(selected.violins2 || 0, scores.violins2 || 0, lead * 0.72);
+  }
+  if (features.lowRegister > 0.68 && (scores.cellos || 0) >= bestScore * 0.68) {
+    selected.cellos = scores.cellos;
+  }
+
+  return Object.keys(selected).length ? selected : { [bestId]: bestScore };
+}
+
+function selectPianoInstrumentScores(scores, features, maxScore) {
+  if (!hasProtectedPianoLead(features)) return null;
+  const pianoScore = scores.harpPiano || 0;
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  if (!pianoScore && pianoConfidence < 0.68) return null;
+  const selected = {
+    harpPiano: Math.max(pianoScore, pianoConfidence * 0.9)
+  };
+
+  if ((features.stringConfidence || 0) > 0.64 && (features.pianoPercussiveGate || 0) < 0.52) {
+    ['violins1', 'violins2', 'violas', 'cellos']
+      .map((id) => [id, scores[id] || 0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .forEach(([id, score]) => {
+        if (score >= selected.harpPiano * 0.72) selected[id] = score;
+      });
+  }
+
+  return selected;
+}
+
+function selectWindInstrumentScores(scores, features, maxScore) {
+  const windConfidence = features.windConfidence || 0;
+  if (hasProtectedStringLead(features) && windConfidence < (features.bowedStringConfidence || 0) + 0.18) return null;
+  const windEntries = ['woodwindsHigh', 'woodwindsLow', 'horns', 'brass']
+    .map((id) => [id, scores[id] || 0])
+    .sort((a, b) => b[1] - a[1]);
+  const [bestWindId, bestWindScore] = windEntries[0] || ['', 0];
+  if (!bestWindScore || windConfidence < 0.52) return null;
+  const pianoStrike = hasPianoStrike(features);
+  if (pianoStrike && !hasProtectedWindLead(features, bestWindId)) return null;
+  const leadRatio = windConfidence > 0.68 ? 0.58 : 0.68;
+  if (bestWindScore < maxScore * leadRatio) return null;
+
+  const selected = {};
+  const maxWindCount = windConfidence > 0.72 ? 3 : 2;
+  const followerRatio = windConfidence > 0.72 ? 0.58 : 0.68;
+  windEntries.slice(0, maxWindCount).forEach(([id, score]) => {
+    const feature = getWindFeatureForId(features, id);
+    if (score >= bestWindScore * followerRatio && feature > 0.38) selected[id] = score;
+  });
+
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  const pianoHasAttack = (features.pianoPercussiveGate || 0) > 0.68 || (features.pianoHammerEvidence || 0) > 0.82;
+  if (pianoConfidence > 0.56 && pianoHasAttack && (scores.harpPiano || 0) >= bestWindScore * 0.72) {
+    selected.harpPiano = scores.harpPiano;
+  }
+
+  if (features.stringConfidence > 0.58) {
+    ['violins1', 'violins2', 'violas', 'cellos']
+      .map((id) => [id, scores[id] || 0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .forEach(([id, score]) => {
+        if (score >= Math.max(bestWindScore * 0.68, maxScore * 0.5)) selected[id] = score;
+      });
+  }
+
+  return Object.keys(selected).length ? selected : null;
+}
+
+function selectActiveInstrumentScores(scores, features) {
+  const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const maxScore = entries.length ? entries[0][1] : 0;
+  if (!maxScore) return {};
+
+  const runnerUp = entries[1] ? entries[1][1] : 0;
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  const [bestWindId] = getStrongestWindScore(scores);
+  const protectedWindLead = hasProtectedWindLead(features, bestWindId);
+  const stringSelected = selectStringInstrumentScores(scores, features, maxScore);
+  if (stringSelected) return stringSelected;
+  const pianoSelected = selectPianoInstrumentScores(scores, features, maxScore);
+  if (pianoSelected) return pianoSelected;
+  const windSelected = selectWindInstrumentScores(scores, features, maxScore);
+  if (windSelected) return windSelected;
+
+  const pianoDominant = (
+    pianoConfidence > 0.58 &&
+    scores.harpPiano >= maxScore * (pianoConfidence > 0.7 ? 0.72 : 0.84) &&
+    scores.harpPiano >= runnerUp * (pianoConfidence > 0.7 ? 0.88 : 0.98) &&
+    features.rangeCoverage > 0.42 &&
+    features.noisy < 0.62 &&
+    ((features.windConfidence || 0) < 0.66 || (
+      !protectedWindLead &&
+      pianoConfidence > 0.72 &&
+      (features.pianoPercussiveGate || 0) > 0.58
+    ))
+  );
+  if (pianoDominant) {
+    return { harpPiano: scores.harpPiano };
+  }
+
+  const percussionDominant = (
+    scores.percussion >= maxScore * 0.94 &&
+    features.transient > 0.58 &&
+    features.noisy > 0.42
+  );
+  if (percussionDominant) {
+    const selected = { percussion: scores.percussion };
+    if (scores.timpani > maxScore * 0.62) selected.timpani = scores.timpani;
+    return selected;
+  }
+
+  const maxActive = features.stringConfidence > 0.5 && features.transient < 0.28
+    ? 3
+    : features.ensembleDensity > 0.72 ? 8 : features.ensembleDensity > 0.54 ? 5 : features.ensembleDensity > 0.36 ? 3 : 2;
+  const threshold = Math.max(0.2, maxScore * (features.ensembleDensity > 0.6 ? 0.5 : 0.58));
+  const selected = {};
+  entries.forEach(([id, score]) => {
+    if (Object.keys(selected).length >= maxActive) return;
+    if (score >= threshold) selected[id] = score;
+  });
+
+  if (!Object.keys(selected).length) {
+    selected[entries[0][0]] = entries[0][1];
+  }
+  return selected;
+}
+
+function selectFrameInstrumentScores(scores, features) {
+  const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const maxScore = entries.length ? entries[0][1] : 0;
+  if (!maxScore) return {};
+
+  const pianoConfidence = features.pianoConfidence || features.keyboardConfidence || 0;
+  const pianoEvidence = (features.pianoHammerEvidence || 0) > 0.12 ||
+    features.rangeCoverage > 0.78 ||
+    features.lowRegister < 0.74;
+  const stringSelected = selectStringInstrumentScores(scores, features, maxScore);
+  if (stringSelected) return stringSelected;
+  const pianoSelected = selectPianoInstrumentScores(scores, features, maxScore);
+  if (pianoSelected) return pianoSelected;
+  const windSelected = selectWindInstrumentScores(scores, features, maxScore);
+  if (windSelected) return windSelected;
+
+  const keyboardLead = (
+    pianoConfidence > 0.52 &&
+    pianoEvidence &&
+    scores.harpPiano >= maxScore * (pianoConfidence > 0.68 ? 0.62 : 0.74) &&
+    features.rangeCoverage > 0.42 &&
+    features.noisy < 0.68 &&
+    (features.windConfidence || 0) < 0.66
+  );
+  if (keyboardLead) {
+    const selected = { harpPiano: scores.harpPiano };
+    const stringIds = ['violins1', 'violins2', 'violas', 'cellos', 'basses'];
+    if (features.stringConfidence > 0.58 && features.transient < 0.52) {
+      stringIds
+        .map((id) => [id, scores[id] || 0])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .forEach(([id, score]) => {
+          if (score >= maxScore * 0.6) selected[id] = score;
+        });
+    }
+    return selected;
+  }
+
+  const lowStringLead = (
+    features.lowRegister > 0.58 &&
+    features.stringConfidence > 0.58 &&
+    (features.windConfidence || 0) < 0.58 &&
+    features.transient < 0.3 &&
+    scores.cellos >= maxScore * 0.92
+  );
+  if (lowStringLead) {
+    const selected = { cellos: scores.cellos };
+    if (features.lowRegister > 0.72 && scores.basses >= maxScore * 0.9) selected.basses = scores.basses;
+    return selected;
+  }
+
+  const selected = selectActiveInstrumentScores(scores, features);
+  const pianoLikely = pianoConfidence > 0.56 && (
+    (features.pianoPercussiveGate || 0) > 0.22 ||
+    features.rangeCoverage > 0.76 ||
+    (features.pianoHammerEvidence || 0) > 0.24
+  );
+  if (!pianoLikely && features.stringConfidence > 0.6 && features.transient < 0.34 && selected.harpPiano && Object.keys(selected).length > 1) {
+    delete selected.harpPiano;
+  }
+  suppressWeakFrameFollowers(selected);
+  return selected;
+}
+
+function suppressWeakFrameFollowers(selected) {
+  const entries = Object.entries(selected).sort((a, b) => b[1] - a[1]);
+  if (entries.length <= 1) return;
+  const best = entries[0][1];
+  entries.slice(1).forEach(([id, score]) => {
+    const keepWindFollower = isWindSectionId(id) && score >= best * 0.42;
+    if (!keepWindFollower && score < best * 0.52) delete selected[id];
+  });
+}
+
+function weightedScore(parts) {
+  let total = 0;
+  let weight = 0;
+  parts.forEach(([value, itemWeight]) => {
+    total += clamp(value, 0, 1) * itemWeight;
+    weight += itemWeight;
+  });
+  return weight ? clamp(total / weight, 0, 1) : 0;
+}
+
+async function analyzeWithDeepAudioModel(samples, sampleRate) {
+  if (!samples || !samples.length) return createEmptyAiProfile('skipped', 'empty audio');
+
+  try {
+    const runtime = await withTimeout(loadDeepAudioModel(), DEEP_AUDIO_MODEL.timeoutMs, 'AI model load timed out');
+    if (!runtime || !runtime.extractor || !runtime.model) {
+      return createEmptyAiProfile('unavailable', deepAudioModelState.reason || 'model unavailable');
+    }
+
+    const modelInput = prepareDeepAudioInput(samples, sampleRate);
+    if (!modelInput || modelInput.length < DEEP_AUDIO_MODEL.targetSampleRate) {
+      return createEmptyAiProfile('skipped', 'audio too short');
+    }
+
+    await nextFrame();
+    const features = runtime.extractor.computeFrameWise(modelInput, DEEP_AUDIO_MODEL.hopSize);
+    const predictions = await withTimeout(runtime.model.predict(features, true), DEEP_AUDIO_MODEL.timeoutMs, 'AI model inference timed out');
+    return buildAiProfileFromPredictions(predictions);
+  } catch (error) {
+    console.warn('Deep audio model unavailable:', error);
+    return createEmptyAiProfile('unavailable', error && error.message ? error.message : String(error));
+  }
+}
+
+function loadDeepAudioModel() {
+  if (deepAudioModelState.model && deepAudioModelState.extractor) {
+    return Promise.resolve(deepAudioModelState);
+  }
+  if (deepAudioModelState.unavailable) {
+    return Promise.resolve(null);
+  }
+  if (deepAudioModelState.loadPromise) return deepAudioModelState.loadPromise;
+
+  deepAudioModelState.loadPromise = (async () => {
+    if (!window.tf) throw new Error('TensorFlow.js is not loaded');
+    if (!window.EssentiaWASM || !window.EssentiaModel) throw new Error('Essentia.js model runtime is not loaded');
+
+    if (window.tf.setBackend && window.tf.getBackend && window.tf.getBackend() !== 'webgl') {
+      try {
+        await window.tf.setBackend('webgl');
+      } catch (error) {
+        console.warn('TF.js WebGL backend unavailable; using current backend.', error);
+      }
+    }
+    if (window.tf.ready) await window.tf.ready();
+
+    const wasmModule = await window.EssentiaWASM();
+    const extractor = new window.EssentiaModel.EssentiaTFInputExtractor(wasmModule, 'musicnn', false);
+    const model = new window.EssentiaModel.TensorflowMusiCNN(window.tf, DEEP_AUDIO_MODEL.modelUrl, false);
+    await model.initialize();
+
+    deepAudioModelState.extractor = extractor;
+    deepAudioModelState.model = model;
+    deepAudioModelState.unavailable = false;
+    deepAudioModelState.reason = '';
+    return deepAudioModelState;
+  })().catch((error) => {
+    deepAudioModelState.unavailable = true;
+    deepAudioModelState.reason = error && error.message ? error.message : String(error);
+    deepAudioModelState.loadPromise = null;
+    return null;
+  });
+
+  return deepAudioModelState.loadPromise;
+}
+
+function prepareDeepAudioInput(samples, sampleRate) {
+  const sourceRate = Math.max(1, sampleRate || DEEP_AUDIO_MODEL.targetSampleRate);
+  const totalSeconds = samples.length / sourceRate;
+  if (totalSeconds <= DEEP_AUDIO_MODEL.maxSeconds + 1) {
+    return normalizeAudioForModel(resampleAudioRange(samples, sourceRate, DEEP_AUDIO_MODEL.targetSampleRate, 0, samples.length));
+  }
+
+  const clipSeconds = 6;
+  const clipCount = Math.min(9, Math.max(4, Math.ceil(totalSeconds / 48)));
+  const sourceClipLength = Math.max(1, Math.floor(clipSeconds * sourceRate));
+  const targetClipLength = Math.max(1, Math.round(clipSeconds * DEEP_AUDIO_MODEL.targetSampleRate));
+  const output = new Float32Array(targetClipLength * clipCount);
+
+  for (let clip = 0; clip < clipCount; clip += 1) {
+    const ratio = clipCount === 1 ? 0.5 : clip / (clipCount - 1);
+    const center = Math.floor(ratio * Math.max(0, samples.length - 1));
+    const start = clamp(Math.floor(center - sourceClipLength / 2), 0, Math.max(0, samples.length - sourceClipLength));
+    const segment = resampleAudioRange(samples, sourceRate, DEEP_AUDIO_MODEL.targetSampleRate, start, sourceClipLength);
+    output.set(segment.subarray(0, targetClipLength), clip * targetClipLength);
+  }
+
+  return normalizeAudioForModel(output);
+}
+
+function resampleAudioRange(samples, sourceRate, targetRate, sourceStart, sourceLength) {
+  const targetLength = Math.max(1, Math.round((sourceLength / sourceRate) * targetRate));
+  const output = new Float32Array(targetLength);
+  const ratio = sourceRate / targetRate;
+  const maxIndex = samples.length - 1;
+
+  for (let i = 0; i < targetLength; i += 1) {
+    const sourcePosition = sourceStart + i * ratio;
+    const left = clamp(Math.floor(sourcePosition), 0, maxIndex);
+    const right = Math.min(maxIndex, left + 1);
+    const mix = sourcePosition - left;
+    output[i] = (samples[left] || 0) * (1 - mix) + (samples[right] || 0) * mix;
+  }
+
+  return output;
+}
+
+function normalizeAudioForModel(samples) {
+  let peak = 0;
+  let dc = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const value = samples[i] || 0;
+    peak = Math.max(peak, Math.abs(value));
+    dc += value;
+  }
+  const offset = samples.length ? dc / samples.length : 0;
+  const scale = peak > 1 ? 1 / peak : 1;
+  const output = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i += 1) {
+    output[i] = clamp(((samples[i] || 0) - offset) * scale, -1, 1);
+  }
+  return output;
+}
+
+function buildAiProfileFromPredictions(predictions) {
+  const rows = normalizePredictionRows(predictions);
+  if (!rows.length) return createEmptyAiProfile('empty', 'no model predictions');
+
+  const tagScores = {};
+  DEEP_AUDIO_MODEL.classes.forEach((tag, index) => {
+    let peak = 0;
+    let sum = 0;
+    rows.forEach((row) => {
+      const value = clamp(Number(row[index]) || 0, 0, 1);
+      peak = Math.max(peak, value);
+      sum += value;
+    });
+    const mean = sum / rows.length;
+    tagScores[tag] = clamp(peak * 0.72 + mean * 0.28, 0, 1);
+  });
+
+  const sectionScores = {};
+  Object.entries(DEEP_AUDIO_MODEL.sectionWeights).forEach(([tag, weights]) => {
+    const tagScore = tagScores[tag] || 0;
+    Object.entries(weights).forEach(([sectionId, weight]) => {
+      sectionScores[sectionId] = Math.max(sectionScores[sectionId] || 0, clamp(tagScore * weight, 0, 1));
+    });
+  });
+
+  const topTags = Object.entries(tagScores)
+    .filter(([, score]) => score >= DEEP_AUDIO_MODEL.minTagScore)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([tag, score]) => ({ tag, score }));
+
+  return {
+    enabled: true,
+    source: DEEP_AUDIO_MODEL.source,
+    status: 'ready',
+    tagScores,
+    sectionScores,
+    topTags,
+    activeIds: Object.entries(sectionScores)
+      .filter(([id, score]) => score >= getAiActivationThreshold(id))
+      .map(([id]) => id)
+  };
+}
+
+function normalizePredictionRows(predictions) {
+  if (!Array.isArray(predictions)) return [];
+  if (!predictions.length) return [];
+  if (Array.isArray(predictions[0])) return predictions;
+  if (predictions.length === DEEP_AUDIO_MODEL.classes.length) return [predictions];
+  return [];
+}
+
+function createEmptyAiProfile(status, reason) {
+  return {
+    enabled: false,
+    source: DEEP_AUDIO_MODEL.source,
+    status,
+    reason: reason || '',
+    tagScores: {},
+    sectionScores: {},
+    topTags: [],
+    activeIds: []
+  };
+}
+
+function applyAiToSelectedScores(selectedScores, profileScores, features, aiProfile) {
+  if (!aiProfile || !aiProfile.enabled || !aiProfile.sectionScores) return selectedScores;
+  const selected = { ...selectedScores };
+  ORCHESTRA_SECTIONS.forEach((section) => {
+    const aiScore = getAiSectionScore(aiProfile, section.id);
+    if (aiScore < getAiActivationThreshold(section.id)) return;
+    if (section.id === 'harpPiano' && hasProtectedStringLead(features)) return;
+    if (isWindSectionId(section.id) && hasProtectedStringLead(features) && aiScore < 0.42) return;
+    const localFeature = getAiLocalFeature(section.id, features);
+    const profileScore = profileScores[section.id] || 0;
+    const evidence = Math.max(profileScore, localFeature, aiScore * 0.64);
+    selected[section.id] = Math.max(selected[section.id] || 0, clamp(evidence * 0.55 + aiScore * 0.58, 0, 1));
+  });
+  return selected;
+}
+
+function applyAiToFrameScores(activeScores, combinedScores, signatureScores, features, aiProfile) {
+  if (!aiProfile || !aiProfile.enabled || !aiProfile.sectionScores) return activeScores;
+  let next = activeScores;
+
+  ORCHESTRA_SECTIONS.forEach((section) => {
+    const aiScore = getAiSectionScore(aiProfile, section.id);
+    if (aiScore < getAiActivationThreshold(section.id)) return;
+    if (section.id === 'harpPiano' && hasProtectedStringLead(features)) return;
+    if (isWindSectionId(section.id) && hasProtectedStringLead(features) && aiScore < 0.42) return;
+    const localFeature = getAiLocalFeature(section.id, features);
+    const localEvidence = Math.max(combinedScores[section.id] || 0, signatureScores[section.id] || 0, localFeature);
+    if (localEvidence < getAiFrameEvidenceThreshold(section.id, aiScore)) return;
+    if (next === activeScores) next = { ...activeScores };
+    next[section.id] = Math.max(next[section.id] || 0, clamp(localEvidence * (0.72 + aiScore * 0.28), 0, 1));
+  });
+
+  return next;
+}
+
+function getAiSectionScore(aiProfile, sectionId) {
+  return aiProfile && aiProfile.sectionScores ? aiProfile.sectionScores[sectionId] || 0 : 0;
+}
+
+function getAiActivationThreshold(sectionId) {
+  const thresholds = {
+    harpPiano: 0.11,
+    woodwindsHigh: 0.1,
+    violins1: 0.12,
+    violins2: 0.12,
+    violas: 0.14,
+    cellos: 0.12,
+    basses: 0.2,
+    percussion: 0.26,
+    timpani: 0.3
+  };
+  return thresholds[sectionId] || 0.18;
+}
+
+function getAiFrameEvidenceThreshold(sectionId, aiScore) {
+  const base = {
+    harpPiano: 0.2,
+    woodwindsHigh: 0.18,
+    cellos: 0.2,
+    violins1: 0.18,
+    violins2: 0.18,
+    percussion: 0.32,
+    timpani: 0.42
+  };
+  return Math.max((base[sectionId] || 0.24) - aiScore * 0.08, 0.12);
+}
+
+function getAiLocalFeature(sectionId, features) {
+  if (!features) return 0;
+  if (sectionId === 'harpPiano') {
+    return Math.max(
+      features.pianoConfidence || 0,
+      features.keyboardConfidence || 0,
+      (features.pianoHammerEvidence || 0) * 0.9,
+      (features.pianoPercussiveGate || 0) * 0.72
+    );
+  }
+  if (sectionId === 'woodwindsHigh') return Math.max(features.woodwindHighConfidence || 0, features.windConfidence || 0);
+  if (isWindSectionId(sectionId)) return getWindFeatureForId(features, sectionId);
+  if (sectionId === 'basses') return Math.max(features.lowRegister || 0, (features.stringConfidence || 0) * 0.52);
+  if (sectionId === 'cellos' || sectionId === 'violas' || sectionId === 'violins1' || sectionId === 'violins2') {
+    return Math.max(
+      features.stringConfidence || 0,
+      features.bowedStringConfidence || 0,
+      features.stringStaccatoConfidence || 0,
+      sectionId.startsWith('violins') ? features.violinConfidence || 0 : 0
+    );
+  }
+  if (sectionId === 'percussion' || sectionId === 'timpani') {
+    return Math.max(features.transient || 0, (features.noisy || 0) * 0.78);
+  }
+  return 0;
+}
+
+function summarizeAiInstrumentProfile(aiProfile) {
+  if (!aiProfile) return createEmptyAiProfile('skipped', 'not run');
+  return {
+    enabled: aiProfile.enabled,
+    source: aiProfile.source,
+    status: aiProfile.status,
+    reason: aiProfile.reason || '',
+    topTags: aiProfile.topTags || [],
+    activeIds: aiProfile.activeIds || []
+  };
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timer = 0;
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    window.clearTimeout(timer);
   });
 }
 
@@ -1298,6 +2885,8 @@ function applyAnalysis(analysis) {
     updateRemasterModeUi({ animateCompare: true });
   }
   resetTags('완료');
+  refs.tags.stage.textContent = getStageDetectionSummary(analysis);
+  renderAiInsights(analysis);
   drawAllCanvases();
 }
 
@@ -1313,7 +2902,8 @@ function renderMetadata(analysis) {
     ['제목 태그', analysis.tags.title || '-'],
     ['아티스트 태그', analysis.tags.artist || '-'],
     ['앨범 태그', analysis.tags.album || '-'],
-    ['장르 태그', analysis.tags.genre || '-']
+    ['장르 태그', analysis.tags.genre || '-'],
+    ['AI model', getAiMetadataLabel(analysis.aiProfile)]
   ];
 
   refs.metadataList.innerHTML = rows.map(([label, value]) => `
@@ -1322,6 +2912,103 @@ function renderMetadata(analysis) {
       <dd>${escapeHtml(String(value))}</dd>
     </div>
   `).join('');
+}
+
+function getAiMetadataLabel(aiProfile) {
+  if (!aiProfile) return 'not run';
+  if (!aiProfile.enabled) return `${aiProfile.source}: ${aiProfile.status}${aiProfile.reason ? ` (${aiProfile.reason})` : ''}`;
+  const tags = (aiProfile.topTags || []).slice(0, 4).map((item) => `${item.tag} ${Math.round(item.score * 100)}%`);
+  return tags.length ? `${aiProfile.source}: ${tags.join(', ')}` : `${aiProfile.source}: ready`;
+}
+
+function renderAiInsights(analysis) {
+  if (!refs.aiSummaryGrid || !refs.aiChipList || !refs.aiSectionGrid) return;
+  const aiProfile = analysis.aiProfile || createEmptyAiProfile('skipped', 'not run');
+  refs.tags.ai.textContent = getAiTagLabel(aiProfile);
+
+  const cards = buildAiSummaryCards(analysis, aiProfile);
+  refs.aiSummaryGrid.innerHTML = cards.map((card) => `
+    <div class="ai-summary-card">
+      <span>${escapeHtml(card.label)}</span>
+      <strong>${escapeHtml(card.value)}</strong>
+      <small>${escapeHtml(card.note)}</small>
+    </div>
+  `).join('');
+
+  const topTags = aiProfile.enabled && aiProfile.topTags && aiProfile.topTags.length
+    ? aiProfile.topTags.slice(0, 8)
+    : [];
+  refs.aiChipList.innerHTML = topTags.length
+    ? topTags.map((item) => `
+      <span class="ai-chip" style="--value:${Math.round(item.score * 100)}%">
+        <strong>${escapeHtml(item.tag)}</strong>
+        <em>${Math.round(item.score * 100)}%</em>
+      </span>
+    `).join('')
+    : '<span class="ai-chip is-muted"><strong>AI tags</strong><em>대기</em></span>';
+
+  const rows = buildAiSectionRows(analysis, aiProfile);
+  refs.aiSectionGrid.innerHTML = rows.map((row) => `
+    <div class="ai-section-row ${row.active ? '' : 'is-inactive'}" style="--section-color:${row.color};--value:${Math.round(row.value * 100)}%">
+      <strong>${escapeHtml(row.short)}</strong>
+      <span>${escapeHtml(row.label)}</span>
+      <em>${Math.round(row.value * 100)}%</em>
+      <i aria-hidden="true"><b></b></i>
+    </div>
+  `).join('');
+}
+
+function buildAiSummaryCards(analysis, aiProfile) {
+  const activeIds = analysis.instrumentProfile && analysis.instrumentProfile.activeIds
+    ? analysis.instrumentProfile.activeIds
+    : [];
+  const backend = window.tf && window.tf.getBackend ? window.tf.getBackend() : 'native';
+  const aiState = aiProfile.enabled ? 'ON' : 'Fallback';
+  const mix = analysis.mixHealth || {};
+  const mixScore = Math.round(clamp(
+    (mix.clarity || 0) * 0.44 +
+    (mix.monoCompatibility || 0) * 0.34 +
+    (1 - (mix.polishNeed || 0.5)) * 0.22,
+    0,
+    1
+  ) * 100);
+  const dynamicDensity = analysis.stageActivity && analysis.stageActivity.activeIds
+    ? analysis.stageActivity.activeIds.length
+    : activeIds.length;
+  const spatialScore = Math.round(clamp(activeIds.length / 8 * 0.55 + dynamicDensity / 12 * 0.45, 0, 1) * 100);
+
+  return [
+    { label: 'Model', value: aiState, note: aiProfile.enabled ? `${aiProfile.source} · ${backend}` : aiProfile.reason || aiProfile.status },
+    { label: 'Detected', value: `${activeIds.length}`, note: activeIds.length ? activeIds.map((id) => ORCHESTRA_BY_ID[id] ? ORCHESTRA_BY_ID[id].short : id).slice(0, 4).join(', ') : 'active sections' },
+    { label: 'Mix Readiness', value: `${mixScore}%`, note: `clarity ${Math.round((mix.clarity || 0) * 100)}%` },
+    { label: 'Stage Depth', value: `${spatialScore}%`, note: `${dynamicDensity} live lanes` }
+  ];
+}
+
+function buildAiSectionRows(analysis, aiProfile) {
+  const displayMap = getStageDisplayLevelMap(analysis);
+  const activeMap = getStageActiveMap(analysis);
+  const dynamicMax = analysis.stageActivity && analysis.stageActivity.maxLevels ? analysis.stageActivity.maxLevels : {};
+  return ORCHESTRA_SECTIONS.map((section) => {
+    const aiScore = getAiSectionScore(aiProfile, section.id);
+    const display = displayMap[section.id] || 0;
+    const dynamic = dynamicMax[section.id] || 0;
+    const value = clamp(Math.max(aiScore, display * 0.88, dynamic), 0, 1);
+    return {
+      id: section.id,
+      short: section.short,
+      label: section.label,
+      color: section.color,
+      value,
+      active: activeMap[section.id] !== false && value > 0.05
+    };
+  }).sort((a, b) => Number(b.active) - Number(a.active) || b.value - a.value);
+}
+
+function getAiTagLabel(aiProfile) {
+  if (!aiProfile) return '대기';
+  if (aiProfile.enabled) return 'AI 활성';
+  return aiProfile.status === 'unavailable' ? 'AI 폴백' : 'AI 대기';
 }
 
 function renderBands(analysis) {
@@ -1338,29 +3025,32 @@ function renderBands(analysis) {
 }
 
 function renderStage(analysis, liveLevel = 0.18) {
-  const levelMap = Object.fromEntries(analysis.stageLevels.map((item) => [item.id, item.level]));
+  const levelMap = getStageDisplayLevelMap(analysis);
   refs.stageMap.innerHTML = renderConcertHallArt() + ORCHESTRA_SECTIONS.map((section) => {
     const position = getStagePosition(section);
-    const level = clamp((levelMap[section.id] || 0.1) * (0.54 + liveLevel * 0.64), 0.08, 1);
-    const size = 44 + level * 22;
-    const glow = 14 + level * 28;
+    const active = isStageSectionActive(analysis, section.id);
+    const level = active ? clamp((levelMap[section.id] || 0) * (0.54 + liveLevel * 0.64), 0.08, 1) : 0;
+    const size = active ? 44 + level * 22 : 40;
+    const glow = active ? 14 + level * 28 : 6;
     return `
-      <div class="stage-node" data-stage="${section.id}" style="--x:${position.x}%;--y:${position.y}%;--level:${level.toFixed(3)};--size:${size.toFixed(1)}px;--glow:${glow.toFixed(1)}px;--node-color:${section.color}" title="${escapeHtml(section.label)} · ${escapeHtml(section.role)} · 드래그로 위치 이동">
+      <div class="stage-node ${active ? '' : 'is-inactive'}" data-stage="${section.id}" style="--x:${position.x}%;--y:${position.y}%;--level:${level.toFixed(3)};--scale:${(size / 48).toFixed(3)};--glow:${glow.toFixed(1)}px;--node-color:${section.color}" title="${escapeHtml(section.label)} · ${escapeHtml(section.role)} · 드래그로 위치 이동">
         ${escapeHtml(section.short)}
       </div>
     `;
   }).join('');
 
   refs.stageList.innerHTML = ORCHESTRA_SECTIONS.map((section) => {
-    const level = clamp((levelMap[section.id] || 0.1), 0, 1);
+    const active = isStageSectionActive(analysis, section.id);
+    const level = active ? clamp((levelMap[section.id] || 0), 0, 1) : 0;
     return `
-      <div class="stage-row" data-stage-row="${section.id}">
+      <div class="stage-row ${active ? '' : 'is-inactive'}" data-stage-row="${section.id}">
         <strong>${escapeHtml(section.label)}</strong>
         <span class="stage-track"><span style="--value:${Math.round(level * 100)}%"></span></span>
         <em>${escapeHtml(section.role)}</em>
       </div>
     `;
   }).join('');
+  cacheStageElements();
 }
 
 function renderConcertHallArt() {
@@ -1381,20 +3071,123 @@ function renderConcertHallArt() {
   `;
 }
 
-function updateStageActivity(liveLevel) {
-  if (!state.analysis) return;
-  const levelMap = Object.fromEntries(state.analysis.stageLevels.map((item) => [item.id, item.level]));
-  ORCHESTRA_SECTIONS.forEach((section) => {
-    const node = refs.stageMap.querySelector(`[data-stage="${section.id}"]`);
-    const track = refs.stageList.querySelector(`[data-stage-row="${section.id}"] .stage-track span`);
-    const level = clamp((levelMap[section.id] || 0.1) * (0.5 + liveLevel * 0.75), 0.08, 1);
-    if (node) {
-      node.style.setProperty('--level', level.toFixed(3));
-      node.style.setProperty('--size', `${(44 + level * 22).toFixed(1)}px`);
-      node.style.setProperty('--glow', `${(14 + level * 28).toFixed(1)}px`);
-    }
-    if (track) track.style.setProperty('--value', `${Math.round(level * 100)}%`);
+function getStageLevelMap(analysis) {
+  if (!analysis) return {};
+  if (!analysis.stageLevelMap) {
+    analysis.stageLevelMap = Object.fromEntries((analysis.stageLevels || []).map((item) => [item.id, item.level]));
+  }
+  return analysis.stageLevelMap;
+}
+
+function getStageDisplayLevelMap(analysis) {
+  if (!analysis) return {};
+  if (!analysis.stageDisplayLevelMap) {
+    const levels = analysis.stageDisplayLevels || analysis.stageLevels || [];
+    analysis.stageDisplayLevelMap = Object.fromEntries(levels.map((item) => [item.id, item.level]));
+  }
+  return analysis.stageDisplayLevelMap;
+}
+
+function getStageActiveMap(analysis) {
+  if (!analysis) return {};
+  if (!analysis.stageActiveMap) {
+    const levels = analysis.stageDisplayLevels || analysis.stageLevels || [];
+    analysis.stageActiveMap = Object.fromEntries(levels.map((item) => [item.id, item.active !== false && (item.level || 0) > 0]));
+  }
+  return analysis.stageActiveMap;
+}
+
+function isStageSectionActive(analysis, sectionId) {
+  const activeMap = getStageActiveMap(analysis);
+  return activeMap[sectionId] !== false;
+}
+
+function getStageDetectionSummary(analysis) {
+  const activeIds = analysis && analysis.instrumentProfile && analysis.instrumentProfile.activeIds
+    ? analysis.instrumentProfile.activeIds
+    : Object.entries(getStageActiveMap(analysis)).filter(([, active]) => active).map(([id]) => id);
+  if (!activeIds.length) return '악기 분석 대기';
+  const names = activeIds.slice(0, 3).map((id) => {
+    const section = ORCHESTRA_BY_ID[id];
+    return section ? section.short : id;
   });
+  return activeIds.length > 3 ? `감지 ${names.join(', ')} +${activeIds.length - 3}` : `감지 ${names.join(', ')}`;
+}
+
+function cacheStageElements() {
+  stageElementCache.nodes.clear();
+  stageElementCache.rows.clear();
+  stageElementCache.tracks.clear();
+  stageElementCache.nodeLevels.clear();
+  stageElementCache.trackLevels.clear();
+  stageElementCache.liveStates.clear();
+  refs.stageMap.querySelectorAll('.stage-node[data-stage]').forEach((node) => {
+    stageElementCache.nodes.set(node.dataset.stage, node);
+  });
+  refs.stageList.querySelectorAll('[data-stage-row]').forEach((row) => {
+    stageElementCache.rows.set(row.dataset.stageRow, row);
+    const track = row.querySelector('.stage-track span');
+    if (track) stageElementCache.tracks.set(row.dataset.stageRow, track);
+  });
+}
+
+function updateStageActivity(liveLevel, { force = false } = {}) {
+  if (!state.analysis) return;
+  const now = performance.now();
+  if (!force && state.playing && state.lastStageUiAt && now - state.lastStageUiAt < STAGE_ACTIVITY_UPDATE_MS) return;
+  state.lastStageUiAt = now;
+  const playbackTime = getPlaybackTime();
+  ORCHESTRA_SECTIONS.forEach((section) => {
+    const node = stageElementCache.nodes.get(section.id);
+    const row = stageElementCache.rows.get(section.id);
+    const track = stageElementCache.tracks.get(section.id);
+    const globallyActive = isStageSectionActive(state.analysis, section.id);
+    const realtimeLevel = getStageRealtimeSectionLevel(state.analysis, section.id, playbackTime);
+    const level = globallyActive ? clamp(realtimeLevel, 0, 1) : 0;
+    const liveActive = globallyActive && level >= 0.075;
+    const nodeLevelKey = Math.round(level * 1000);
+    if (node) {
+      if (stageElementCache.nodeLevels.get(section.id) !== nodeLevelKey) {
+        const size = globallyActive ? 42 + level * 26 : 40;
+        node.style.setProperty('--level', level.toFixed(3));
+        node.style.setProperty('--scale', (size / 48).toFixed(3));
+        node.style.setProperty('--glow', `${(globallyActive ? 8 + level * 36 : 6).toFixed(1)}px`);
+        stageElementCache.nodeLevels.set(section.id, nodeLevelKey);
+      }
+      updateStageLiveClass(section.id, node, liveActive, globallyActive);
+    }
+    if (row) updateStageLiveClass(`${section.id}:row`, row, liveActive, globallyActive);
+    if (track) {
+      const trackLevelKey = Math.round(level * 100);
+      if (stageElementCache.trackLevels.get(section.id) !== trackLevelKey) {
+        track.style.setProperty('--value', `${trackLevelKey}%`);
+        stageElementCache.trackLevels.set(section.id, trackLevelKey);
+      }
+    }
+  });
+}
+
+function updateStageLiveClass(key, element, liveActive, globallyActive) {
+  const stateKey = `${globallyActive ? 1 : 0}:${liveActive ? 1 : 0}`;
+  if (stageElementCache.liveStates.get(key) === stateKey) return;
+  element.classList.toggle('is-inactive', !globallyActive);
+  element.classList.toggle('is-silent', globallyActive && !liveActive);
+  stageElementCache.liveStates.set(key, stateKey);
+}
+
+function getStageRealtimeSectionLevel(analysis, sectionId, time) {
+  const activity = analysis && analysis.stageActivity;
+  const levels = activity && activity.levelsBySection ? activity.levelsBySection[sectionId] : null;
+  if (!levels || !levels.length || !analysis.duration) {
+    const displayLevelMap = getStageDisplayLevelMap(analysis);
+    return displayLevelMap[sectionId] || 0;
+  }
+  const ratio = clamp(time / analysis.duration, 0, 1);
+  const position = ratio * (levels.length - 1);
+  const leftIndex = Math.floor(position);
+  const rightIndex = Math.min(levels.length - 1, leftIndex + 1);
+  const mix = position - leftIndex;
+  return levels[leftIndex] * (1 - mix) + levels[rightIndex] * mix;
 }
 
 function getStagePosition(section) {
@@ -1476,9 +3269,9 @@ function updateStagePositionFromPointer(event) {
 }
 
 function updateStageNodeElement(sectionId) {
-  const section = ORCHESTRA_SECTIONS.find((item) => item.id === sectionId);
+  const section = ORCHESTRA_BY_ID[sectionId];
   if (!section) return;
-  const node = refs.stageMap.querySelector(`[data-stage="${sectionId}"]`);
+  const node = stageElementCache.nodes.get(sectionId);
   if (!node) return;
   const position = getStagePosition(section);
   node.style.setProperty('--x', `${position.x}%`);
@@ -1487,16 +3280,14 @@ function updateStageNodeElement(sectionId) {
 
 function updateLivePanner(sectionId) {
   if (!state.graph || !state.graph.panners || !state.graph.panners[sectionId] || !state.analysis) return;
-  const section = ORCHESTRA_SECTIONS.find((item) => item.id === sectionId);
+  const section = ORCHESTRA_BY_ID[sectionId];
   if (!section) return;
   const placement = getSectionPlacement(section);
   const remaster = state.settings.remaster !== false && state.analysis.remaster
     ? state.analysis.remaster
     : createNeutralRemasterProfile();
-  const levelItem = state.analysis.stageLevels
-    ? state.analysis.stageLevels.find((item) => item.id === section.id)
-    : null;
-  const level = levelItem ? levelItem.level : 0.5;
+  const stageLevelMap = getStageLevelMap(state.analysis);
+  const level = Number.isFinite(stageLevelMap[section.id]) ? stageLevelMap[section.id] : 0.5;
   const y = state.mode === 'atmos' ? getAtmosHeightForSection(section, level) * 0.42 : 0;
   const atmosScale = state.mode === 'atmos' ? 1.08 : 1;
   setPannerPosition(
@@ -1756,6 +3547,8 @@ async function startPlayback(offset = 0) {
   state.playing = true;
   state.startedAt = audioContext.currentTime - safeOffset;
   state.offset = safeOffset;
+  state.lastTransportUiAt = 0;
+  state.lastStageUiAt = 0;
   refs.playButton.textContent = 'Ⅱ';
   refs.playButton.setAttribute('aria-label', '일시정지');
 
@@ -1790,7 +3583,7 @@ function stopPlayback(resetOffset) {
   if (state.analysis) {
     drawWaveform(state.analysis, state.offset);
     drawLoudness(state.analysis, state.offset);
-    updateStageActivity(0.18);
+    updateStageActivity(0.18, { force: true });
   }
 }
 
@@ -1818,7 +3611,11 @@ function startPlaybackLoop() {
       return;
     }
     state.offset = time;
-    updateTransportTime();
+    const now = performance.now();
+    if (!state.lastTransportUiAt || now - state.lastTransportUiAt >= PLAYBACK_TRANSPORT_UPDATE_MS) {
+      updateTransportTime();
+      state.lastTransportUiAt = now;
+    }
     const liveLevel = getLiveLevel(state.analysis, time);
     document.documentElement.style.setProperty('--live', liveLevel.toFixed(3));
     drawWaveform(state.analysis, time);
@@ -1832,6 +3629,8 @@ function startPlaybackLoop() {
 function stopPlaybackLoop() {
   if (animationFrame) cancelAnimationFrame(animationFrame);
   animationFrame = 0;
+  state.lastTransportUiAt = 0;
+  state.lastStageUiAt = 0;
   document.documentElement.style.setProperty('--live', '0.12');
 }
 
@@ -1880,15 +3679,15 @@ function updateModeDescription() {
   const descriptions = {
     spatial: {
       title: '공간음향',
-      copy: '무대 폭, 전후 깊이, 홀 잔향, 출력으로 대편성 오케스트라 무대를 재구성합니다. 기본 출력은 원본과 같은 100%입니다.'
+      copy: '무대 폭, 전후 깊이, 홀 잔향, 출력으로 대편성 오케스트라 무대를 재구성합니다.'
     },
     atmos: {
       title: 'DOLBY ATMOS',
-      copy: '출력 기본값은 원본과 같은 100%로 유지하고, 별도로 오브젝트 높이감, 상부 반사, 후방 확산, 바이노럴 HRTF 레이어를 추가합니다.'
+      copy: '오브젝트 높이감, 상부 반사, 후방 확산, 바이노럴 HRTF 레이어를 추가합니다.'
     },
     original: {
       title: '원본',
-      copy: '공간화와 리마스터 체인을 거치지 않는 기준 재생입니다. 다른 모드의 기본 출력 기준도 이 원본 볼륨입니다.'
+      copy: '공간화와 리마스터 체인을 거치지 않는 기준 재생입니다.'
     }
   };
   const item = descriptions[state.mode] || descriptions.spatial;
@@ -2187,36 +3986,35 @@ function createSpatialGraph(ctx, buffer, settings, analysis = null) {
   source.buffer = buffer;
   const remasterEnabled = settings.remaster !== false;
   const remaster = remasterEnabled && analysis && analysis.remaster ? analysis.remaster : createNeutralRemasterProfile();
-  const toneOutput = remasterEnabled ? createRemasterToneChain(ctx, source, remaster) : source;
-  const stageLevelMap = analysis && analysis.stageLevels
-    ? Object.fromEntries(analysis.stageLevels.map((item) => [item.id, item.level]))
-    : {};
+  const toneOutput = remasterEnabled ? createRemasterToneChain(ctx, source, remaster, { spatialSafe: true }) : source;
+  const stageLevelMap = getStageLevelMap(analysis);
 
   const dryBus = ctx.createGain();
-  dryBus.gain.value = remasterEnabled ? 0.72 : 0.78;
+  dryBus.gain.value = remasterEnabled ? 0.72 : 0.76;
   const wetSend = ctx.createGain();
-  wetSend.gain.value = (0.15 + settings.room * 0.23) * (remasterEnabled ? remaster.roomScale : 1);
+  wetSend.gain.value = (0.08 + settings.room * 0.14) * (remasterEnabled ? remaster.roomScale : 1);
   const convolver = ctx.createConvolver();
   convolver.buffer = createImpulseResponse(ctx, (0.56 + settings.room * 1.72) * (remasterEnabled ? remaster.roomScale : 1), 1.9 + settings.room * 2.35);
   const wetGain = ctx.createGain();
-  wetGain.gain.value = 0.09 + settings.room * 0.32;
+  wetGain.gain.value = 0.055 + settings.room * 0.19;
   const clarityAnchor = ctx.createGain();
-  clarityAnchor.gain.value = remasterEnabled ? remaster.clarityMix : 0.1;
+  clarityAnchor.gain.value = remasterEnabled ? clamp(remaster.clarityMix * 4.2, 0.72, 0.88) : 0.72;
   const masterInput = ctx.createGain();
+  masterInput.gain.value = getSpatialBusHeadroom('spatial', settings);
   const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = remasterEnabled ? remaster.compressorThreshold : -12;
+  compressor.threshold.value = remasterEnabled ? Math.min(remaster.compressorThreshold, -13.5) : -14;
   compressor.knee.value = remasterEnabled ? 10 : 14;
-  compressor.ratio.value = remasterEnabled ? remaster.compressorRatio : 3.2;
+  compressor.ratio.value = remasterEnabled ? clamp(remaster.compressorRatio, 1.45, 2.45) : 2.4;
   compressor.attack.value = remasterEnabled ? remaster.compressorAttack : 0.008;
-  compressor.release.value = remasterEnabled ? remaster.compressorRelease : 0.22;
+  compressor.release.value = remasterEnabled ? Math.max(remaster.compressorRelease, 0.16) : 0.24;
   const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = remasterEnabled ? remaster.limiterThreshold : -1;
+  limiter.threshold.value = remasterEnabled ? Math.min(remaster.limiterThreshold, -1.4) : -1.4;
   limiter.knee.value = 0;
-  limiter.ratio.value = 20;
-  limiter.attack.value = 0.002;
-  limiter.release.value = 0.06;
+  limiter.ratio.value = 14;
+  limiter.attack.value = 0.0015;
+  limiter.release.value = 0.09;
   const output = ctx.createGain();
-  output.gain.value = settings.gain;
+  output.gain.value = settings.gain * 1.06;
   const panners = {};
 
   toneOutput.connect(clarityAnchor);
@@ -2256,9 +4054,9 @@ function createSpatialGraph(ctx, buffer, settings, analysis = null) {
 
     const gain = ctx.createGain();
     const level = clamp(stageLevelMap[section.id] || 0.5, 0, 1);
-    gain.gain.value = section.gain * (0.7 + level * 0.56) * getSectionRemasterWeight(section, remaster);
+    gain.gain.value = section.gain * getSpatialSectionTrim('spatial', settings) * (0.7 + level * 0.48) * getSectionRemasterWeight(section, remaster);
     const sectionSend = ctx.createGain();
-    sectionSend.gain.value = section.send * (0.88 + Math.abs(placement.z) * 0.035) * (remaster.roomScale || 1);
+    sectionSend.gain.value = section.send * 0.58 * (0.78 + Math.abs(placement.z) * 0.024) * (remaster.roomScale || 1);
 
     toneOutput.connect(filter);
     filter.connect(panner);
@@ -2277,42 +4075,41 @@ function createAtmosGraph(ctx, buffer, settings, analysis = null) {
   source.buffer = buffer;
   const remasterEnabled = settings.remaster !== false;
   const remaster = remasterEnabled && analysis && analysis.remaster ? analysis.remaster : createNeutralRemasterProfile();
-  const toneOutput = remasterEnabled ? createRemasterToneChain(ctx, source, remaster) : source;
-  const stageLevelMap = analysis && analysis.stageLevels
-    ? Object.fromEntries(analysis.stageLevels.map((item) => [item.id, item.level]))
-    : {};
+  const toneOutput = remasterEnabled ? createRemasterToneChain(ctx, source, remaster, { spatialSafe: true }) : source;
+  const stageLevelMap = getStageLevelMap(analysis);
 
   const bedBus = ctx.createGain();
-  bedBus.gain.value = 0.64;
+  bedBus.gain.value = 0.62;
   const heightBus = ctx.createGain();
-  heightBus.gain.value = 0.34 + settings.room * 0.12;
+  heightBus.gain.value = 0.24 + settings.room * 0.08;
   const clarityAnchor = ctx.createGain();
-  clarityAnchor.gain.value = remasterEnabled ? clamp(remaster.clarityMix * 0.84, 0.08, 0.18) : 0.08;
+  clarityAnchor.gain.value = remasterEnabled ? clamp(remaster.clarityMix * 3.8, 0.62, 0.78) : 0.64;
   const wetSend = ctx.createGain();
-  wetSend.gain.value = (0.18 + settings.room * 0.25) * (remaster.roomScale || 1);
+  wetSend.gain.value = (0.085 + settings.room * 0.13) * (remaster.roomScale || 1);
   const convolver = ctx.createConvolver();
   convolver.buffer = createImpulseResponse(ctx, (0.72 + settings.room * 1.95) * (remaster.roomScale || 1), 2.1 + settings.room * 2.6);
   const wetGain = ctx.createGain();
-  wetGain.gain.value = 0.13 + settings.room * 0.36;
+  wetGain.gain.value = 0.055 + settings.room * 0.18;
   const heightAir = ctx.createBiquadFilter();
   heightAir.type = 'highshelf';
   heightAir.frequency.value = 6800;
   heightAir.gain.value = remasterEnabled ? clamp((remaster.highShelfDb || 0) * 0.35 + 0.8, -0.8, 1.8) : 0.5;
   const masterInput = ctx.createGain();
+  masterInput.gain.value = getSpatialBusHeadroom('atmos', settings);
   const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = remasterEnabled ? remaster.compressorThreshold - 1.2 : -13;
+  compressor.threshold.value = remasterEnabled ? Math.min(remaster.compressorThreshold - 0.8, -14.5) : -15;
   compressor.knee.value = 12;
-  compressor.ratio.value = remasterEnabled ? clamp(remaster.compressorRatio * 0.92, 1.3, 2.8) : 2.4;
+  compressor.ratio.value = remasterEnabled ? clamp(remaster.compressorRatio * 0.86, 1.35, 2.35) : 2.15;
   compressor.attack.value = remasterEnabled ? remaster.compressorAttack : 0.008;
-  compressor.release.value = remasterEnabled ? remaster.compressorRelease : 0.22;
+  compressor.release.value = remasterEnabled ? Math.max(remaster.compressorRelease, 0.18) : 0.24;
   const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = remasterEnabled ? remaster.limiterThreshold : -1;
+  limiter.threshold.value = remasterEnabled ? Math.min(remaster.limiterThreshold, -1.5) : -1.5;
   limiter.knee.value = 0;
-  limiter.ratio.value = 20;
-  limiter.attack.value = 0.002;
-  limiter.release.value = 0.06;
+  limiter.ratio.value = 14;
+  limiter.attack.value = 0.0015;
+  limiter.release.value = 0.095;
   const output = ctx.createGain();
-  output.gain.value = settings.gain;
+  output.gain.value = settings.gain * 1.04;
   const panners = {};
 
   toneOutput.connect(clarityAnchor);
@@ -2355,7 +4152,7 @@ function createAtmosGraph(ctx, buffer, settings, analysis = null) {
     const delay = ctx.createDelay(0.09);
     delay.delayTime.value = clamp((Math.abs(placement.z) * 0.0034 + Math.abs(placement.x) * 0.0009 + height * 0.004) * settings.depth, 0, 0.075);
     const gain = ctx.createGain();
-    gain.gain.value = section.gain * (0.66 + level * 0.58) * getSectionRemasterWeight(section, remaster);
+    gain.gain.value = section.gain * getSpatialSectionTrim('atmos', settings) * (0.66 + level * 0.42) * getSectionRemasterWeight(section, remaster);
 
     const heightFilter = ctx.createBiquadFilter();
     heightFilter.type = 'highpass';
@@ -2374,10 +4171,10 @@ function createAtmosGraph(ctx, buffer, settings, analysis = null) {
       placement.z * settings.depth * remaster.depthScale * 0.84
     );
     const heightGain = ctx.createGain();
-    heightGain.gain.value = section.gain * clamp(0.14 + height * 0.2 + level * 0.08, 0.08, 0.42);
+    heightGain.gain.value = section.gain * clamp(0.07 + height * 0.12 + level * 0.05, 0.045, 0.24);
 
     const send = ctx.createGain();
-    send.gain.value = section.send * (1.05 + height * 0.18) * (remaster.roomScale || 1);
+    send.gain.value = section.send * 0.54 * (0.88 + height * 0.12) * (remaster.roomScale || 1);
 
     toneOutput.connect(filter);
     filter.connect(panner);
@@ -2437,9 +4234,26 @@ function getSectionRemasterWeight(section, remaster) {
   return clamp(focusWeight * dbToGain((eqDb || 0) * 0.28), 0.74, 1.26);
 }
 
-function createRemasterToneChain(ctx, source, profile) {
+function getSpatialBusHeadroom(mode, settings) {
+  const roomTrim = 1 - clamp(settings.room || 0, 0, 1) * (mode === 'atmos' ? 0.18 : 0.14);
+  const modeTrim = mode === 'atmos' ? 0.78 : 0.78;
+  return clamp(modeTrim * roomTrim, 0.56, 0.82);
+}
+
+function getSpatialSectionTrim(mode, settings) {
+  const roomTrim = 1 - clamp(settings.room || 0, 0, 1) * (mode === 'atmos' ? 0.22 : 0.16);
+  const modeTrim = mode === 'atmos' ? 0.86 : 0.9;
+  return clamp(modeTrim * roomTrim, 0.58, 0.94);
+}
+
+function clampSpatialEqDb(value, scale = 0.72) {
+  return clamp((Number(value) || 0) * scale, -2.4, 2.4);
+}
+
+function createRemasterToneChain(ctx, source, profile, options = {}) {
+  const spatialSafe = options.spatialSafe === true;
   const inputGain = ctx.createGain();
-  inputGain.gain.value = dbToGain(profile.inputGainDb);
+  inputGain.gain.value = dbToGain(spatialSafe ? clamp(profile.inputGainDb, -8, 2.2) : profile.inputGainDb);
 
   const highpass = ctx.createBiquadFilter();
   highpass.type = 'highpass';
@@ -2449,33 +4263,33 @@ function createRemasterToneChain(ctx, source, profile) {
   const lowShelf = ctx.createBiquadFilter();
   lowShelf.type = 'lowshelf';
   lowShelf.frequency.value = 105;
-  lowShelf.gain.value = profile.lowShelfDb;
+  lowShelf.gain.value = spatialSafe ? clampSpatialEqDb(profile.lowShelfDb, 0.68) : profile.lowShelfDb;
 
   const lowMid = ctx.createBiquadFilter();
   lowMid.type = 'peaking';
   lowMid.frequency.value = 360;
   lowMid.Q.value = 0.9;
-  lowMid.gain.value = profile.lowMidDb;
+  lowMid.gain.value = spatialSafe ? clampSpatialEqDb(profile.lowMidDb, 0.68) : profile.lowMidDb;
 
   const presence = ctx.createBiquadFilter();
   presence.type = 'peaking';
   presence.frequency.value = 3200;
   presence.Q.value = 0.82;
-  presence.gain.value = profile.presenceDb;
+  presence.gain.value = spatialSafe ? clampSpatialEqDb(profile.presenceDb, 0.64) : profile.presenceDb;
 
   const highShelf = ctx.createBiquadFilter();
   highShelf.type = 'highshelf';
   highShelf.frequency.value = 9200;
-  highShelf.gain.value = profile.highShelfDb;
+  highShelf.gain.value = spatialSafe ? clampSpatialEqDb(profile.highShelfDb, 0.58) : profile.highShelfDb;
 
   const deHarsh = ctx.createBiquadFilter();
   deHarsh.type = 'peaking';
   deHarsh.frequency.value = 5800;
   deHarsh.Q.value = 2.2;
-  deHarsh.gain.value = profile.harshnessTameDb || 0;
+  deHarsh.gain.value = spatialSafe ? clamp(profile.harshnessTameDb || 0, -2.2, 0.6) : profile.harshnessTameDb || 0;
 
   const polish = ctx.createWaveShaper();
-  polish.curve = createSoftSaturationCurve(profile.harmonicDrive || 0);
+  polish.curve = createSoftSaturationCurve(spatialSafe ? Math.min(profile.harmonicDrive || 0, 0.012) : profile.harmonicDrive || 0);
   polish.oversample = '2x';
 
   source.connect(inputGain);
@@ -2492,7 +4306,14 @@ function createRemasterToneChain(ctx, source, profile) {
 function createSoftSaturationCurve(amount) {
   const samples = 2048;
   const curve = new Float32Array(samples);
-  const drive = 1 + clamp(amount, 0, 0.12) * 18;
+  const driveAmount = clamp(amount, 0, 0.12);
+  if (driveAmount <= 0.001) {
+    for (let i = 0; i < samples; i += 1) {
+      curve[i] = (i / (samples - 1)) * 2 - 1;
+    }
+    return curve;
+  }
+  const drive = 1 + driveAmount * 12;
   for (let i = 0; i < samples; i += 1) {
     const x = (i / (samples - 1)) * 2 - 1;
     curve[i] = Math.tanh(x * drive) / Math.tanh(drive);
@@ -2512,6 +4333,14 @@ function setPannerPosition(panner, x, y, z) {
 
 function createImpulseResponse(ctx, seconds, decay) {
   const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
+  const cacheKey = [
+    ctx.sampleRate,
+    length,
+    Math.round(decay * 1000)
+  ].join('|');
+  if (impulseResponseCache.has(cacheKey)) {
+    return impulseResponseCache.get(cacheKey);
+  }
   const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
   const earlyReflections = [
     { time: 0.012, gain: 0.55 },
@@ -2545,6 +4374,11 @@ function createImpulseResponse(ctx, seconds, decay) {
     }
   }
 
+  impulseResponseCache.set(cacheKey, impulse);
+  if (impulseResponseCache.size > IMPULSE_RESPONSE_CACHE_LIMIT) {
+    const oldestKey = impulseResponseCache.keys().next().value;
+    impulseResponseCache.delete(oldestKey);
+  }
   return impulse;
 }
 
@@ -2564,7 +4398,28 @@ async function renderExportAudioBuffer(buffer, mode, settings, analysis, layout)
         ? createDirectMultichannelGraph(offline, buffer, settings, layout, analysis)
       : createMultichannelSpatialGraph(offline, buffer, settings, analysis, layout, mode);
   graph.source.start(0);
-  return offline.startRendering();
+  const rendered = await offline.startRendering();
+  return normalizeRenderedAudioBuffer(rendered, mode === 'original' ? -0.4 : -1.2);
+}
+
+function normalizeRenderedAudioBuffer(buffer, targetPeakDb = -1.2) {
+  const target = dbToGain(targetPeakDb);
+  let peak = 0;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < data.length; i += 1) {
+      peak = Math.max(peak, Math.abs(data[i] || 0));
+    }
+  }
+  if (!peak || peak <= target) return buffer;
+  const scale = target / peak;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < data.length; i += 1) {
+      data[i] *= scale;
+    }
+  }
+  return buffer;
 }
 
 function createOriginalMultichannelGraph(ctx, buffer, settings, layout) {
@@ -2657,13 +4512,11 @@ function createMultichannelSpatialGraph(ctx, buffer, settings, analysis, layout,
   source.buffer = buffer;
   const remasterEnabled = settings.remaster !== false;
   const remaster = remasterEnabled && analysis && analysis.remaster ? analysis.remaster : createNeutralRemasterProfile();
-  const toneOutput = remasterEnabled ? createRemasterToneChain(ctx, source, remaster) : source;
-  const stageLevelMap = analysis && analysis.stageLevels
-    ? Object.fromEntries(analysis.stageLevels.map((item) => [item.id, item.level]))
-    : {};
+  const toneOutput = remasterEnabled ? createRemasterToneChain(ctx, source, remaster, { spatialSafe: true }) : source;
+  const stageLevelMap = getStageLevelMap(analysis);
   const merger = ctx.createChannelMerger(layout.channels.length);
   const output = ctx.createGain();
-  output.gain.value = settings.gain;
+  output.gain.value = settings.gain * (mode === 'atmos' ? 0.82 : 0.88);
   setDiscreteChannelMode(merger, layout.channels.length);
   setDiscreteChannelMode(output, layout.channels.length);
 
@@ -2676,7 +4529,7 @@ function createMultichannelSpatialGraph(ctx, buffer, settings, analysis, layout,
 
     const sectionGain = ctx.createGain();
     const modeTrim = mode === 'atmos' ? 0.86 : 0.92;
-    sectionGain.gain.value = section.gain * modeTrim * (0.72 + level * 0.52) * getSectionRemasterWeight(section, remaster);
+    sectionGain.gain.value = section.gain * modeTrim * getSpatialSectionTrim(mode, settings) * (0.58 + level * 0.38) * getSectionRemasterWeight(section, remaster);
 
     toneOutput.connect(filter);
     filter.connect(sectionGain);
@@ -2920,6 +4773,44 @@ function writeString(view, offset, text) {
   }
 }
 
+function invalidateStaticCanvasCache() {
+  staticCanvasCache.waveform = null;
+  staticCanvasCache.loudness = null;
+}
+
+function invalidateThemeValueCache() {
+  themeValueCache.key = '';
+  themeValueCache.values.clear();
+  invalidateStaticCanvasCache();
+}
+
+function getThemeCacheKey() {
+  return document.documentElement.dataset.theme || 'light';
+}
+
+function getStaticCanvasKey(kind, analysis, width, height, dpr) {
+  return [
+    kind,
+    getThemeCacheKey(),
+    width,
+    height,
+    dpr,
+    analysis.duration,
+    analysis.sampleRate,
+    analysis.hue
+  ].join('|');
+}
+
+function createCanvasSurface(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return {
+    canvas,
+    ctx: canvas.getContext('2d')
+  };
+}
+
 function drawAllCanvases() {
   if (!state.analysis) {
     renderEmptyCanvases();
@@ -2934,10 +4825,29 @@ function drawAllCanvases() {
 
 function drawWaveform(analysis, currentTime = 0) {
   const { ctx, width, height, dpr } = prepareCanvas(refs.waveform);
+  const staticCanvas = getStaticWaveformCanvas(analysis, width, height, dpr);
+  ctx.drawImage(staticCanvas, 0, 0);
+  if (currentTime > 0) {
+    const cursorX = analysis.duration ? (currentTime / analysis.duration) * width : 0;
+    drawCursor(ctx, cursorX, height, dpr);
+  }
+}
+
+function getStaticWaveformCanvas(analysis, width, height, dpr) {
+  const key = getStaticCanvasKey('waveform', analysis, width, height, dpr);
+  if (staticCanvasCache.waveform && staticCanvasCache.waveform.key === key) {
+    return staticCanvasCache.waveform.canvas;
+  }
+  const surface = createCanvasSurface(width, height);
+  drawStaticWaveform(surface.ctx, analysis, width, height, dpr);
+  staticCanvasCache.waveform = { key, canvas: surface.canvas };
+  return surface.canvas;
+}
+
+function drawStaticWaveform(ctx, analysis, width, height, dpr) {
   const peaks = analysis.waveform;
   const count = peaks.length / 3;
   const center = height * 0.5;
-  const cursorX = analysis.duration ? (currentTime / analysis.duration) * width : 0;
 
   drawCanvasBackground(ctx, width, height, analysis.hue);
   ctx.strokeStyle = themeVar('--canvas-center-line', 'rgba(70, 89, 53, 0.16)');
@@ -2979,10 +4889,6 @@ function drawWaveform(analysis, currentTime = 0) {
     const rms = peaks[i * 3 + 2];
     const barHeight = Math.max(1, rms * height * 0.9);
     ctx.fillRect(x, center - barHeight / 2, Math.max(1, width / count), barHeight);
-  }
-
-  if (currentTime > 0) {
-    drawCursor(ctx, cursorX, height, dpr);
   }
 }
 
@@ -3047,11 +4953,35 @@ function drawSpectrogram(analysis) {
 
 function drawLoudness(analysis, currentTime = 0) {
   const { ctx, width, height, dpr } = prepareCanvas(refs.loudness);
+  const staticCanvas = getStaticLoudnessCanvas(analysis, width, height, dpr);
+  ctx.drawImage(staticCanvas, 0, 0);
+  if (currentTime > 0) {
+    const cursorX = analysis.duration ? (currentTime / analysis.duration) * width : 0;
+    drawCursor(ctx, cursorX, height, dpr);
+  }
+}
+
+function getStaticLoudnessCanvas(analysis, width, height, dpr) {
+  const key = getStaticCanvasKey('loudness', analysis, width, height, dpr);
+  if (staticCanvasCache.loudness && staticCanvasCache.loudness.key === key) {
+    return staticCanvasCache.loudness.canvas;
+  }
+  const surface = createCanvasSurface(width, height);
+  drawStaticLoudness(surface.ctx, analysis, width, height, dpr);
+  staticCanvasCache.loudness = { key, canvas: surface.canvas };
+  return surface.canvas;
+}
+
+function drawStaticLoudness(ctx, analysis, width, height, dpr) {
   const windows = analysis.loudness.windows;
   drawCanvasBackground(ctx, width, height, analysis.hue);
   if (!windows.length) return;
 
-  const minDb = Math.min(-72, Math.floor(Math.min(...windows.map((item) => item.db)) / 6) * 6);
+  let minWindowDb = Infinity;
+  for (let i = 0; i < windows.length; i += 1) {
+    minWindowDb = Math.min(minWindowDb, windows[i].db);
+  }
+  const minDb = Math.min(-72, Math.floor(minWindowDb / 6) * 6);
   const maxDb = 0;
   const yForDb = (db) => {
     const ratio = clamp((db - minDb) / (maxDb - minDb), 0, 1);
@@ -3082,11 +5012,6 @@ function drawLoudness(analysis, currentTime = 0) {
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
-
-  if (currentTime > 0) {
-    const cursorX = analysis.duration ? (currentTime / analysis.duration) * width : 0;
-    drawCursor(ctx, cursorX, height, dpr);
-  }
 
   drawAxisLabel(ctx, `${analysis.loudness.rmsDb.toFixed(1)} dBFS RMS`, width, height, dpr);
 }
@@ -3126,8 +5051,17 @@ function drawAxisLabel(ctx, text, width, height, dpr) {
 }
 
 function themeVar(name, fallback) {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
+  const key = getThemeCacheKey();
+  if (themeValueCache.key !== key) {
+    themeValueCache.key = key;
+    themeValueCache.values.clear();
+  }
+  if (themeValueCache.values.has(name)) {
+    return themeValueCache.values.get(name);
+  }
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  themeValueCache.values.set(name, value);
+  return value;
 }
 
 function prepareCanvas(canvas) {
@@ -3147,6 +5081,7 @@ function prepareCanvas(canvas) {
 function renderEmptyState() {
   stopPlayback(true);
   cancelSpatialSliderAnimation();
+  invalidateStaticCanvasCache();
   state.remasterCompareRows = [];
   state.remasterCompareColumn = '';
   document.body.classList.remove('has-analysis', 'is-busy');
@@ -3223,25 +5158,53 @@ function renderEmptyState() {
   refs.timelineList.innerHTML = '<div class="timeline-card"><strong>--:--</strong><p>구간 분석 대기</p><small>파일 선택 후 표시</small></div>';
   renderEmptyStage();
   resetTags('대기');
+  renderEmptyAiInsights();
   renderEmptyCanvases();
+}
+
+function renderEmptyAiInsights() {
+  if (!refs.aiSummaryGrid || !refs.aiChipList || !refs.aiSectionGrid) return;
+  refs.tags.ai.textContent = '대기';
+  refs.aiSummaryGrid.innerHTML = [
+    ['Model', '대기', '파일 분석 후 활성화'],
+    ['Detected', '0', 'active sections'],
+    ['Mix Readiness', '--', 'clarity'],
+    ['Stage Depth', '--', 'live lanes']
+  ].map(([label, value, note]) => `
+    <div class="ai-summary-card">
+      <span>${label}</span>
+      <strong>${value}</strong>
+      <small>${note}</small>
+    </div>
+  `).join('');
+  refs.aiChipList.innerHTML = '<span class="ai-chip is-muted"><strong>AI tags</strong><em>대기</em></span>';
+  refs.aiSectionGrid.innerHTML = ORCHESTRA_SECTIONS.map((section) => `
+    <div class="ai-section-row is-inactive" style="--section-color:${section.color};--value:0%">
+      <strong>${escapeHtml(section.short)}</strong>
+      <span>${escapeHtml(section.label)}</span>
+      <em>0%</em>
+      <i aria-hidden="true"><b></b></i>
+    </div>
+  `).join('');
 }
 
 function renderEmptyStage() {
   refs.stageMap.innerHTML = renderConcertHallArt() + ORCHESTRA_SECTIONS.map((section) => {
     const position = getStagePosition(section);
     return `
-      <div class="stage-node" data-stage="${section.id}" style="--x:${position.x}%;--y:${position.y}%;--level:0.18;--size:48px;--glow:18px;--node-color:${section.color}" title="${escapeHtml(section.label)} · 드래그로 위치 이동">
+      <div class="stage-node is-inactive" data-stage="${section.id}" style="--x:${position.x}%;--y:${position.y}%;--level:0;--scale:0.833;--glow:6px;--node-color:${section.color}" title="${escapeHtml(section.label)} · 드래그로 위치 이동">
         ${escapeHtml(section.short)}
       </div>
     `;
   }).join('');
   refs.stageList.innerHTML = ORCHESTRA_SECTIONS.map((section) => `
-    <div class="stage-row">
+    <div class="stage-row is-inactive">
       <strong>${escapeHtml(section.label)}</strong>
       <span class="stage-track"><span style="--value:0%"></span></span>
       <em>${escapeHtml(section.role)}</em>
     </div>
   `).join('');
+  cacheStageElements();
 }
 
 function renderEmptyCanvases() {
@@ -3450,10 +5413,12 @@ function fft(real, imag) {
 }
 
 function hannWindow(size) {
+  if (hannWindowCache.has(size)) return hannWindowCache.get(size);
   const window = new Float32Array(size);
   for (let i = 0; i < size; i += 1) {
     window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (size - 1)));
   }
+  hannWindowCache.set(size, window);
   return window;
 }
 

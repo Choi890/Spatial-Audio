@@ -1,12 +1,15 @@
 <!doctype html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="업로드한 음악을 브라우저에서 분석하고 대편성 오케스트라 배치 기준으로 공간음향을 생성하는 로컬 웹 앱" />
   <title>Spatial Orchestra Studio</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
   <main class="app-shell">
     <header class="topbar" aria-label="상단">
@@ -65,7 +68,8 @@
 
         <div class="mode-toggle" role="group" aria-label="재생 모드">
           <button class="mode-button is-active" type="button" data-mode="spatial">공간음향</button>
-          <button class="mode-button" type="button" data-mode="atmos" title="Dolby Atmos 방식의 오브젝트/높이감 기반 바이노럴 렌더링">DOLBY ATMOS</button>
+          <button class="mode-button" type="button" data-mode="atmos" title="Dolby Atmos 방식의 오브젝트/높이감 기반 바이노럴 렌더링">DOLBY
+            ATMOS</button>
           <button class="mode-button" type="button" data-mode="original">원본</button>
         </div>
         <div class="mode-description" id="mode-description">
@@ -107,7 +111,7 @@
             <b id="gain-value">100%</b>
           </label>
           <label class="select-control">
-            <span>출력 채널</span>
+            <span>다운로드 음원 채널</span>
             <select id="channel-layout" aria-label="WAV 출력 채널">
               <option value="stereo">2.0 Stereo</option>
               <option value="quad">4.0 Quad</option>
@@ -290,6 +294,19 @@
     </section>
 
     <section class="insight-grid" aria-label="상세 리포트">
+      <article class="panel ai-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">AI INSTRUMENT MODEL</p>
+            <h2>Instrument Insight</h2>
+          </div>
+          <span id="ai-tag">대기</span>
+        </div>
+        <div class="ai-summary-grid" id="ai-summary-grid" aria-label="AI 분석 요약"></div>
+        <div class="ai-chip-list" id="ai-chip-list" aria-label="AI 모델 태그"></div>
+        <div class="ai-section-grid" id="ai-section-grid" aria-label="악기 섹션 신뢰도"></div>
+      </article>
+
       <article class="panel">
         <div class="panel-heading">
           <div>
@@ -332,6 +349,10 @@
   </main>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia-wasm.web.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia.js-model.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
   <script src="script.js"></script>
 </body>
+
 </html>
