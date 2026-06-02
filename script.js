@@ -575,6 +575,7 @@ function handleDrop(event) {
 }
 
 async function handleFile(file) {
+  // Upload starts the analysis, playback graph setup, and spatial render state from one file.
   if (!isAudioFile(file)) {
     showToast('오디오 파일을 선택해 주세요.');
     return;
@@ -865,6 +866,7 @@ function estimateTempo(samples, sampleRate) {
 }
 
 function analyzeSpectrum(samples, sampleRate) {
+  // Spectrum analysis feeds both mix metrics and instrument/stage recommendations.
   const fftSize = 4096;
   const frameCount = Math.min(96, Math.max(14, Math.floor(samples.length / sampleRate * 1.2)));
   const magnitudes = new Float32Array(fftSize / 2);
@@ -1127,6 +1129,7 @@ function buildInstrumentSignatureWeights(fftSize, binHz) {
 }
 
 function estimateKey(samples, sampleRate) {
+  // Chroma scoring gives a lightweight key estimate used for color and report context.
   const fftSize = 4096;
   const frameCount = Math.min(76, Math.max(10, Math.floor(samples.length / sampleRate)));
   const chroma = new Float32Array(12);
@@ -4676,6 +4679,7 @@ function isLowSection(section) {
 }
 
 async function exportSpatialWav() {
+  // Export renders the current spatial settings offline so the downloaded WAV matches the UI controls.
   if (!state.analysis) return;
   stopPlayback(false);
   state.settings = getSpatialSettings();
